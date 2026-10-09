@@ -132,10 +132,12 @@ export function registerJobRunRoutes(app: Express, pool: Pool) {
         const { rows: sets } = await client!.query('SELECT id,name,rules_markdown AS "rulesMarkdown",catalog_headers AS "catalogHeaders" FROM attribute_sets');
         if (!memory?.memory) throw new JobError('QA memory is unavailable', 503);
         const configuration = { settings, qaAgentMemory: memory.memory, attributeSets: sets, jobType,
+          catalogUsesGlobalRules: jobType === 'catalog' ? true : undefined,
           catalogMappings: prepared?.mappings, catalogOutputs: prepared?.outputs,
           catalogMapping: prepared?.mappings.length === 1 ? prepared.mappings[0] : undefined };
         const priorCatalog = jobType === 'catalog' ? (await client!.query(`SELECT DISTINCT ON (i.sku) i.sku,i.result,
-          jsonb_build_object('catalogMappings',r.configuration->'catalogMappings','catalogMapping',r.configuration->'catalogMapping') AS configuration
+          jsonb_build_object('catalogMappings',r.configuration->'catalogMappings','catalogMapping',r.configuration->'catalogMapping',
+            'qaAgentMemory',r.configuration->'qaAgentMemory','catalogUsesGlobalRules',r.configuration->'catalogUsesGlobalRules') AS configuration
           FROM job_run_items i JOIN job_runs r ON r.id=i.run_id
           WHERE r.job_id=$1 ORDER BY i.sku,r.created_at DESC,r.id DESC`, [job.id])).rows : [];
         const priorBySku = new Map(priorCatalog.map(previous => [previous.sku, previous]));
@@ -149,6 +151,7 @@ export function registerJobRunRoutes(app: Express, pool: Pool) {
           const mapping = prepared?.mappings.find(mapping => mapping.attributeSet === snapshot.attribute_set);
           const previousMapping = previous && catalogMappings(previous.configuration).find(mapping => mapping.attributeSet === snapshot.attribute_set);
           const catalogResult = previous?.result && Array.isArray(previous.result.catalog_state?.cellWarnings) && previousMapping?.rulesMarkdown === mapping?.rulesMarkdown &&
+            previous.configuration.catalogUsesGlobalRules === true && previous.configuration.qaAgentMemory === configuration.qaAgentMemory &&
             previous.result.attribute_set === snapshot.attribute_set &&
             previousMapping?.attributeSet === mapping?.attributeSet &&
             JSON.stringify(previousMapping?.headers) === JSON.stringify(mapping?.headers) &&
@@ -329,7 +332,7 @@ async function executeRun(client: PoolClient, pool: Pool, run: any, owner: strin
         } else if (!snapshot.source.sap?.trim()) throw new Error(snapshot.scrape_error || 'Scraping was interrupted. Rerun this SKU to collect evidence.');
       }
       const input = isCatalog
-        ? prepareCatalogInput(snapshot, catalogMappingFor(run.configuration, snapshot.attribute_set), settings.maxPageContentLength)
+        ? prepareCatalogInput(snapshot, catalogMappingFor(run.configuration, snapshot.attribute_set), run.configuration.qaAgentMemory, settings.maxPageContentLength)
         : prepareQaInput(snapshot, run.configuration.attributeSets, run.configuration.qaAgentMemory, settings.maxPageContentLength);
       const payload = buildQaRequest(settings, input).payload;
       // DeepSeek thinking produced 30-second gateway failures for catalog rows; QA keeps its existing effort.

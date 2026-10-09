@@ -51,7 +51,7 @@ export function LLMSettingsModule() {
       <p className="text-sm">URL cleanup tries your saved model first. On temporary model failures it can use GLM or DeepSeek as a backup, with the model used recorded in the evidence.</p>
       <p className="text-sm">The limits and instructions below apply to QA/Catalog processing. Markdown conversion has its own fixed instructions and output limit.</p>
       {([['temperature', 'Temperature', 0, 1, 0.1], ['maxTokens', 'Maximum output tokens', 1, 65536, 1], ['maxPageContentLength', 'Maximum evidence characters', 1, 200000, 1]] as const).map(([key, label, min, max, step]) => <label className="block" key={key}>{label}<input className="block border p-2" type="number" min={min} max={max} step={step} value={draft[key]} onChange={e => change(key, Number(e.target.value))} /></label>)}
-      <label className="block">Shared QA instructions<textarea className="block border p-2 w-full" rows={14} value={draft.qaAgentMemory} onChange={e => change('qaAgentMemory', e.target.value)} /></label>
+      <label className="block">Shared QA / Catalog instructions<textarea className="block border p-2 w-full" rows={14} value={draft.qaAgentMemory} onChange={e => change('qaAgentMemory', e.target.value)} /></label>
       <button className="bg-black text-white px-4 py-2 mr-4" onClick={() => void act()}>Save changes</button>
     </fieldset>
   </section>;

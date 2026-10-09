@@ -202,7 +202,7 @@ Admins edit these in **LLM Settings**. They persist in PostgreSQL and apply to n
 | Temperature | `0.1` | `0`–`1` |
 | Maximum output tokens | `4096` | Integer `1`–`65536`; the model/provider can impose a lower limit |
 | Maximum evidence characters | `40000` | Integer `1`–`200000`; limits web Markdown, not the entire prompt |
-| Shared QA instructions | Built-in catalog review instructions | Global; blank text uses the default |
+| Shared QA / Catalog instructions | Built-in catalog review instructions | Global; blank text uses the default |
 
 The exact default model receives `reasoning_effort: "low"`. Existing saved settings can differ. Compatibility concurrency/retry fields do not increase worker concurrency.
 
@@ -236,7 +236,7 @@ Use the **QA / Catalog** toggle beside Notifications. A fresh page load defaults
    Missing headers reject the whole upload and list the missing names. Input columns may appear in any order, and extra columns are allowed. Headers are mandatory; individual cells may be blank subject to the existing SKU/evidence requirements. `attributes__attribute_set` selects the category mapping, `attributes__sap` supplies factual context, and `attributes__url` supplies the scraper URL. Older `source__*` columns cannot substitute for or override these columns in Catalog mode. QA uploads retain their existing format. API clients use `POST /api/catalog?mode=catalog` for this validation; omitted mode defaults to QA.
 
 3. Select SKUs with one common region and one or more non-empty attribute sets, then choose **Create Catalog Job**. Every SKU needs SAP, usable saved page evidence, or a URL. Every set needs valid Catalog output headers and non-empty mapping rules. Creation prepares one template per set and one populated shipping file, without scraping or model calls.
-4. Successful creation opens the parent job in **Jobs**. **Category Subjobs & Files** shows one subjob/template per attribute set, category progress/failures, and exactly one shared shipping workbook. Download prepared files immediately; choose **Run All Categories** to run the parent, or **Run Catalog** on its card to process unfinished rows. SKU, base code, EAN, shipping weight, brand, and product type pass through unchanged, including blank cells. Other empty cells are generated using SAP/page evidence and explicit mapping defaults. SAP takes factual precedence; mapping examples are formatting guidance, not product facts. Each run snapshots current rules and fixed headers; later edits do not change an active or historical run.
+4. Successful creation opens the parent job in **Jobs**. **Category Subjobs & Files** shows one subjob/template per attribute set, category progress/failures, and exactly one shared shipping workbook. Download prepared files immediately; choose **Run All Categories** to run the parent, or **Run Catalog** on its card to process unfinished rows. SKU, base code, EAN, shipping weight, brand, and product type pass through unchanged, including blank cells. Other empty cells are generated using SAP/page evidence and explicit defaults from the global instructions and category mapping. SAP takes factual precedence; mapping examples are formatting guidance, not product facts. Each run snapshots the shared global instructions, category rules, and fixed headers; later edits do not change an active or historical run.
 5. Inspect generated cells and warnings in **View Results**, then download each set's final `.xlsx` upload file. Uploaded values that conflict with evidence or mapping requirements stay unchanged. Affected cells are highlighted in Jobs and Excel; Excel comments explain the source conflict, missing fact, or mapping requirement. Unknown facts remain blank with cell warnings; malformed or incomplete model responses fail that SKU. All catalog exports preserve these comments, including combined exports after SKU deduplication. Final uploads include only validated rows, report omitted unfinished/failed SKUs per set, and contain exactly the mapped columns without QA or warning columns. Shipping always contains every assigned SKU. Run history selects that run's saved files and schemas; **Current prepared files** shows the most recent prepared snapshot.
 
 Catalog generation requires JSON with `row`, general `warnings`, and `cellWarnings: [{ header, message }]`; each cell warning must use an exact output header. These server-validated findings persist with the result. Historical results without cell warnings remain readable/exportable, but the next unfinished run regenerates them once to produce cell findings. Model validation checks structure, not factual correctness; review representative evidence and flagged values before upload.
@@ -249,18 +249,18 @@ The shipping workbook has one **Shipping** worksheet and exactly 16 text-formatt
 
 | Region | Whippy column | Fallback column |
 | --- | --- | --- |
-| UAE | `attributes__common_item_whippy_uae` | `fallback_uae` |
-| KWT | `attributes__common_item_whippy_kwt` | `fallback_kuwait` |
-| QTR | `attributes__common_item_whippy_qtr` | `fallback_qatar` |
-| OMAN | `attributes__common_item_whippy_oman` | `fallback_oman` |
-| KSA | `attributes__common_item_whippy_ksa` | `fallback_ksa` |
-| BAHRAIN | `attributes__common_item_whippy_bahrain` | `fallback_bahrain` |
+| UAE | `attributes__common_item_whippy_uae` | `attributes__fallback_uae` |
+| KWT | `attributes__common_item_whippy_kwt` | `attributes__fallback_kuwait` |
+| QTR | `attributes__common_item_whippy_qtr` | `attributes__fallback_qatar` |
+| OMAN | `attributes__common_item_whippy_oman` | `attributes__fallback_oman` |
+| KSA | `attributes__common_item_whippy_ksa` | `attributes__fallback_ksa` |
+| BAHRAIN | `attributes__common_item_whippy_bahrain` | `attributes__fallback_bahrain` |
 
-All shipping attributes default to `Courier delivery`; all shipment types default to `Scheduled`. Only the selected region uses non-empty `attribute__shipping_attribute` and `attribute__shipment_type` input cells. `attribute__common_item_whippy` and `attribute__fallback` pass through unchanged, including blanks. Shipping reads these exact original input fields; extra ERP columns cannot override the rules. Region validation ignores case and surrounding whitespace. New jobs reject missing, unknown, or mixed regions; older incompatible jobs can still run Catalog but show shipping as unavailable.
+All shipping attributes default to `Courier delivery`; all shipment types default to `Scheduled`. Only the selected region uses non-empty `attribute__shipping_attribute` and `attribute__shipment_type` input cells. `attribute__common_item_whippy` and `attribute__fallback` pass through unchanged, including blanks. Shipping reads these exact original input fields; extra ERP columns cannot override the rules. Region validation ignores case and surrounding whitespace. New jobs and subsequent runs use the prefixed fallback headers; existing prepared files refresh on the next run, while historical files retain their saved headers. New jobs reject missing, unknown, or mixed regions; older incompatible jobs can still run Catalog but show shipping as unavailable.
 
 Generated content never replaces the original upload or becomes QA input automatically. Catalog results live separately in `catalog_state` and durable run history. Shared evidence edits/scrapes still advance the evidence revision and invalidate older current results. Historical exports remain available without another model call.
 
-Catalog unfinished runs reuse completed results from the same job only when the evidence revision, category, mapping rules, and ordered output headers still match. Changes invalidate only the affected set's rows. New runs refresh prepared templates and snapshot each set's rules/headers; historical files keep their saved snapshots. Cancellation preserves committed rows; resume retries unfinished/failed rows. Selected-job Catalog exports group by attribute set, require identical saved header order within each set, and deduplicate SKUs. Multiple sets get individual download buttons; shipping remains one file per job.
+Catalog unfinished runs reuse completed results from the same job only when the evidence revision, category, global instructions, mapping rules, and ordered output headers still match. Category rule/header changes invalidate only the affected set's rows; global instruction changes invalidate every set. Results generated before Catalog applied global instructions regenerate once on the next unfinished run. New runs refresh prepared templates and snapshot each set's rules/headers; historical files keep their saved snapshots. Cancellation preserves committed rows; resume retries unfinished/failed rows. Selected-job Catalog exports group by attribute set, require identical saved header order within each set, and deduplicate SKUs. Multiple sets get individual download buttons; shipping remains one file per job.
 
 **Resume Catalog** remains available after completion so it can regenerate only rows affected by later mapping changes. **Rerun All** regenerates every assigned SKU. Startup adds the nullable `jobs.catalog_outputs` snapshot column automatically; older jobs keep their saved results and prepare available files on their next run.
 
@@ -336,7 +336,7 @@ Example:
 - Leave the correction blank when no source supports it.
 ```
 
-Shared QA instructions provide standing guidance. Category rules take precedence for category checks; the application's final output/evidence requirements take precedence over both.
+Shared QA / Catalog instructions provide standing guidance for both modes. Category rules take precedence for category checks; the application's final output/evidence requirements take precedence over both.
 
 Missing, blank, or ambiguous rules produce a general review with a warning. New runs snapshot configuration; editing rules does not retroactively change a running review or old result.
 
@@ -371,7 +371,7 @@ Use **Mapping Rules** for the Markdown shared by QA and Catalog. A header sectio
 - `attributes__color`: use only the source-supported color for this SKU; leave blank if unknown. Example format: `Black`.
 ```
 
-This is a format example, not an approved production template. Add all required business columns and their filling instructions before running catalog jobs. On upgrade, compatible legacy Markdown header lists are copied once into the separate stored list; incompatible lists leave it empty for manual setup. Markdown and saved runs are preserved, and clearing headers later does not repopulate them. Legacy browser-rule imports never replace separately configured output headers. Catalog generation uses a dedicated application prompt; shared QA agent memory remains specific to QA.
+This is a format example, not an approved production template. Add all required business columns and their filling instructions before running catalog jobs. On upgrade, compatible legacy Markdown header lists are copied once into the separate stored list; incompatible lists leave it empty for manual setup. Markdown and saved runs are preserved, and clearing headers later does not repopulate them. Legacy browser-rule imports never replace separately configured output headers. Catalog generation applies the shared global instructions and selected category mapping inside its dedicated application prompt. Application requirements take precedence over both, and category rules take precedence for category-specific checks.
 
 `attributes__lulu_product_type` is the mandatory product-type header for Catalog uploads, downloaded input templates, and output-header lists. Older `attributes__product_type` headers cannot substitute in new Catalog uploads and must be removed from newly saved output lists. Startup renames that header in existing saved output lists, preserving order; if both names exist, the canonical header keeps its position. Earlier SKU uploads retain their original rows, and Catalog carries their old product-type value into the renamed column when no canonical value exists. Admitted runs and historical exports retain their saved header snapshots; rerun to generate output with the new header.
 

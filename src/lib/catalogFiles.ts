@@ -19,7 +19,7 @@ export function shippingRegion(skus: SkuData[]): string {
 export function prepareShipping(skus: SkuData[]): NonNullable<CatalogOutputs['shipping']> {
   const region = shippingRegion(skus);
   const whippy = `attributes__common_item_whippy_${region}`;
-  const fallback = `fallback_${fallbackNames[SHIPPING_REGIONS.indexOf(region as typeof SHIPPING_REGIONS[number])]}`;
+  const fallback = `attributes__fallback_${fallbackNames[SHIPPING_REGIONS.indexOf(region as typeof SHIPPING_REGIONS[number])]}`;
   const headers = ['sku', 'base_code', ...SHIPPING_REGIONS.map(shippingHeader), ...SHIPPING_REGIONS.map(shipmentHeader), whippy, fallback];
   const rows = skus.map(sku => Object.fromEntries(headers.map(header => {
     let value = '';

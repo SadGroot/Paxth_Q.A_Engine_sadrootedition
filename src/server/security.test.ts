@@ -583,6 +583,9 @@ try {
   assert.equal((await request('/api/provider-settings','PUT',configured,admin)).status,200);
   const firstCatalog=await startCatalog();assert.equal(firstCatalog.status,202);
   assert.equal(firstCatalog.body.jobType,'catalog');assert.deepEqual(firstCatalog.body.catalogHeaders,catalogHeaders);
+  assert.equal((await pool.query('SELECT configuration FROM job_runs WHERE id=$1',[firstCatalog.body.id])).rows[0].configuration.catalogUsesGlobalRules,true);
+  const laterMemory='Global instructions edited after this run was admitted.';
+  assert.equal((await request('/api/qa-agent-memory','PUT',{qaAgentMemory:laterMemory},admin)).status,200);
   await saveCatalogRules(catalogRules.replace('USB Hub','Changed Mapping Example'),[...catalogHeaders].reverse());
   const catalogOffset=providerRequests.length;
   providerMode='success';stopWorker=startJobWorker(pool,scrape);
@@ -592,6 +595,8 @@ try {
   const generatedCatalog=await catalogRun(firstCatalog.body.id);
   assert.deepEqual(generatedCatalog.catalogHeaders,catalogHeaders,'Header edits do not change admitted runs');
   assert.ok(providerRequests[catalogOffset].messages[0].content.includes(catalogRules),'Mapping updates do not change admitted runs');
+  assert.ok(providerRequests.slice(catalogOffset).every(payload=>payload.messages[0].content.includes(configured.qaAgentMemory)),'Every category request uses admitted global instructions');
+  assert.ok(providerRequests.slice(catalogOffset).every(payload=>!payload.messages[0].content.includes(laterMemory)),'Global edits do not change an admitted run');
   assert.deepEqual(await unchangedQa(),beforeCatalog,'Catalog commits never overwrite QA state or original upload data');
   assert.equal((await pool.query("SELECT status FROM jobs WHERE id='catalog-job'")).rows[0].status,'completed');
   assert.ok(providerRequests.slice(catalogOffset).every(payload=>payload.reasoning_effort==='none'),'DeepSeek Catalog disables thinking while QA retains low effort');
@@ -609,6 +614,7 @@ try {
     assert.ok(item.result.catalog_state.cellWarnings.some((warning:any)=>warning.header==='name'&&warning.message.includes('SAP')));
     assert.equal(item.result.qa_result,undefined);
   }
+  assert.equal((await request('/api/qa-agent-memory','PUT',{qaAgentMemory:configured.qaAgentMemory},admin)).status,200);
   await saveCatalogRules(catalogRules,catalogHeaders);
   const skippedCatalog=await startCatalog();assert.ok(skippedCatalog.body.items.every((item:any)=>item.status==='skipped'));
   const skippedCalls=calls;stopWorker=startJobWorker(pool,scrape);
@@ -721,13 +727,17 @@ try {
   assert.equal(preparedMulti.shipping.headers.length,16);assert.equal(preparedMulti.shipping.rows[0].attributes__erp_shipping_attribute,' 003 ');
   assert.equal(preparedMulti.shipping.rows[0].attributes__erp_shipping_attribute_qtr,'Courier delivery');
   assert.equal(preparedMulti.shipping.rows[0].attributes__common_item_whippy_uae,'0007');
-  assert.equal(preparedMulti.shipping.rows[0].fallback_uae,'');
+  assert.equal(preparedMulti.shipping.rows[0].attributes__fallback_uae,'');
   assert.equal((await request('/api/jobs/multi-job','PUT',{catalogOutputs:{}},user)).status,400);
   const editMulti=await request('/api/jobs/multi-job','PUT',{skus:['multi-a','multi-b']},user);assert.equal(editMulti.status,200);
   assert.deepEqual((await request('/api/jobs/multi-job/outputs','GET',undefined,user)).body.shipping.rows.map((row:any)=>row.sku),['multi-a','multi-b']);
   const rejectedMembership=await request('/api/jobs/multi-job','PUT',{skus:['multi-a','multi-qtr']},user);assert.equal(rejectedMembership.status,400);
   assert.deepEqual((await request('/api/jobs/multi-job/outputs','GET',undefined,user)).body.shipping.rows.map((row:any)=>row.sku),['multi-a','multi-b'],'Invalid membership edits retain the saved files');
   assert.equal((await request('/api/jobs/multi-job','PUT',{skus:multiJob.skus},user)).status,200);
+  const groupRulesSnapshot=[catalogRules+' TestSet-only global regression rule.',catalogRules+' Hub-only global regression rule.'];
+  await saveCatalogRules(groupRulesSnapshot[0],catalogHeaders);
+  await request(`/api/attribute-sets/${hubSet.id}`,'PUT',{name:'Hub',rulesMarkdown:groupRulesSnapshot[1],catalogHeaders:hubHeaders},admin);
+  const multiOffset=providerRequests.length;
   const multiRun=await startCatalog('unfinished',undefined,'multi-job');assert.equal(multiRun.status,202);
   assert.deepEqual(multiRun.body.catalogGroups.map((group:any)=>group.attributeSet),['Hub','TestSet']);
   await request(`/api/attribute-sets/${hubSet.id}`,'PUT',{name:'Hub',rulesMarkdown:catalogRules,catalogHeaders:[...hubHeaders].reverse()},admin);
@@ -738,6 +748,14 @@ try {
   assert.deepEqual(generatedMulti.items[0].result.catalog_state.headers,hubHeaders,'Running groups keep their admitted headers');
   assert.deepEqual(generatedMulti.items[1].result.catalog_state.headers,catalogHeaders);
   assert.equal(generatedMulti.catalogOutputs.shipping.rows.length,3);
+  for(const payload of providerRequests.slice(multiOffset)) {
+    const input=JSON.parse(payload.messages[1].content);
+    const selected=input.attribute_set==='Hub'?1:0;
+    assert.ok(payload.messages[0].content.includes(configured.qaAgentMemory));
+    assert.ok(payload.messages[0].content.includes(groupRulesSnapshot[selected]));
+    assert.ok(!payload.messages[0].content.includes(groupRulesSnapshot[1-selected]),'Category requests never mix mapping rules');
+    assert.deepEqual(Object.keys(input.template),selected===1?hubHeaders:catalogHeaders);
+  }
   const changedGroup=await startCatalog('unfinished',undefined,'multi-job');assert.equal(changedGroup.status,202);
   assert.deepEqual(changedGroup.body.items.map((item:any)=>item.status),['queued','skipped','skipped'],'Only a changed group is regenerated');
   assert.deepEqual(changedGroup.body.catalogOutputs.groups[0].headers,[...hubHeaders].reverse());
@@ -755,6 +773,35 @@ try {
   stopWorker=startJobWorker(pool,scrape);
   await waitFor(async()=>(await catalogRun(groupRules.body.id)).status==='completed','group rules-only resume');
   await stopWorker();stopWorker=undefined;
+
+  const changedGlobal=configured.qaAgentMemory+'\nGlobal rule: generated titles use sentence case.';
+  assert.equal((await request('/api/qa-agent-memory','PUT',{qaAgentMemory:changedGlobal},admin)).status,200);
+  const globalRun=await startCatalog('unfinished',undefined,'multi-job');
+  assert.ok(globalRun.body.items.every((item:any)=>item.status==='queued'),'Global instruction changes invalidate every category');
+  const globalOffset=providerRequests.length;
+  stopWorker=startJobWorker(pool,scrape);
+  await waitFor(async()=>(await catalogRun(globalRun.body.id)).status==='completed','global rules regeneration');
+  await stopWorker();stopWorker=undefined;
+  assert.ok(providerRequests.slice(globalOffset).every(payload=>payload.messages[0].content.includes(changedGlobal)));
+  assert.deepEqual((await catalogRun(multiRun.body.id)).catalogOutputs,generatedMulti.catalogOutputs,'Global edits preserve historical files');
+
+  await pool.query("UPDATE job_runs SET configuration=configuration - 'catalogUsesGlobalRules' WHERE id=$1",[globalRun.body.id]);
+  const legacyGlobal=await catalogRun(globalRun.body.id);
+  const legacyGlobalRun=await startCatalog('unfinished',undefined,'multi-job');
+  assert.ok(legacyGlobalRun.body.items.every((item:any)=>item.status==='queued'),'Pre-fix Catalog results must regenerate even with identical saved global instructions');
+  stopWorker=startJobWorker(pool,scrape);
+  await waitFor(async()=>(await catalogRun(legacyGlobalRun.body.id)).status==='completed','pre-fix global rules regeneration');
+  await stopWorker();stopWorker=undefined;
+  const unchangedGlobal=await startCatalog('unfinished',undefined,'multi-job');
+  assert.ok(unchangedGlobal.body.items.every((item:any)=>item.status==='skipped'),'Upgraded results regenerate only once when globals and mappings remain unchanged');
+  const unchangedGlobalCalls=calls;
+  stopWorker=startJobWorker(pool,scrape);
+  await waitFor(async()=>(await catalogRun(unchangedGlobal.body.id)).status==='completed','global rules completed-row reuse');
+  await stopWorker();stopWorker=undefined;
+  assert.equal(calls,unchangedGlobalCalls,'Unchanged global instructions reuse results without model calls');
+  assert.deepEqual(await catalogRun(globalRun.body.id),legacyGlobal,'Pre-fix run results remain readable and unchanged');
+  assert.equal((await request('/api/qa-agent-memory','PUT',{qaAgentMemory:configured.qaAgentMemory},admin)).status,200);
+
   providerMode='catalog-mixed';const groupFailure=await startCatalog('all',undefined,'multi-job');
   stopWorker=startJobWorker(pool,scrape);
   await waitFor(async()=>(await catalogRun(groupFailure.body.id)).status==='failed','group failed-row handling');

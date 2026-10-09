@@ -13,6 +13,7 @@ const headers = ['sku', 'base_code', 'attributes__attribute_set', 'attributes__l
   'attribute__shipment_type', 'attribute__common_item_whippy', 'attribute__fallback', 'name', 'attributes__color',
   'attributes__shipping_weight', 'attributes__brand', 'attributes__lulu_product_type'];
 const rules = '# Mapping Rules\n\nname: sourced brand and model. attribute__fallback: default No. Leave unsourced colors empty.';
+const memory = 'Existing QA memory';
 const attributeSets = [{ id: 'tv', name: 'TV', rulesMarkdown: rules, catalogHeaders: [] as string[], createdAt: Date.now(), updatedAt: Date.now() }];
 let role = 'admin';
 let failHeaderSave = false;
@@ -46,7 +47,7 @@ try {
     if (path === '/api/auth/me') return route.fulfill({ json: { id: 'operator', username: 'Operator', role } });
     if (path === '/api/users') return route.fulfill({ json: [] });
     if (path === '/api/db-status') return route.fulfill({ json: { status: 'connected' } });
-    if (path === '/api/qa-configuration') return route.fulfill({ json: { qaAgentMemory: 'Existing QA memory', attributeSets: emptyAttributeSets ? [] : attributeSets } });
+    if (path === '/api/qa-configuration') return route.fulfill({ json: { qaAgentMemory: memory, attributeSets: emptyAttributeSets ? [] : attributeSets } });
     if (path === '/api/attribute-sets/tv' && request.method() === 'PUT') {
       headerSaveRequests++;
       if (role !== 'admin') return route.fulfill({ status: 403, json: { error: 'Administrator access required.' } });
@@ -331,7 +332,7 @@ try {
   assert.equal(shippingBook.worksheets[0].name, 'Shipping');assert.equal(shippingBook.worksheets[0].columnCount, 16);
   assert.equal(shippingBook.worksheets[0].rowCount, 3);
   assert.equal(shippingBook.worksheets[0].getRow(1).getCell(15).value, 'attributes__common_item_whippy_uae');
-  assert.equal(shippingBook.worksheets[0].getRow(1).getCell(16).value, 'fallback_uae');
+  assert.equal(shippingBook.worksheets[0].getRow(1).getCell(16).value, 'attributes__fallback_uae');
   assert.equal(shippingBook.worksheets[0].getRow(2).getCell(3).value, '001');
   assert.equal(shippingBook.worksheets[0].getRow(2).getCell(4).value, 'Courier delivery');
   assert.equal(shippingBook.worksheets[0].getRow(2).getCell(9).value, 'Normal');
@@ -350,7 +351,7 @@ try {
   run.status = 'failed'; catalogJob.status = 'failed';
   run.items = run.items.map((item: any, index: number) => {
     const original = catalog.find(sku => sku.sku === item.sku)!;
-    const input = prepareCatalogInput(original, mapping, 40000);
+    const input = prepareCatalogInput(original, mapping, memory, 40000);
     const generated = parseCatalogResponse({ choices: [{ message: { content: JSON.stringify({ row: { ...input.template, name: 'TestBrand USB Hub', attribute__fallback: 'No' }, warnings: [], cellWarnings: [] }) } }] }, input);
     const catalog_state = index === 0 ? { ...generated, status: 'completed' as const, revision: 0, headers, jobId: catalogJob.id }
       : { status: 'failed' as const, revision: 0, headers, jobId: catalogJob.id, warnings: [], cellWarnings: [], error: 'Model returned invalid catalog JSON.' };
@@ -473,7 +474,7 @@ try {
     items: multiJob.skus.map((id, index) => {
       const snapshot = structuredClone(catalog.find(sku => sku.sku === id)!);
       const mapping = getCatalogMapping(snapshot.attribute_set, attributeSets);
-      const input = prepareCatalogInput(snapshot, mapping, 40000);
+      const input = prepareCatalogInput(snapshot, mapping, memory, 40000);
       const generated = parseCatalogResponse({ choices: [{ message: { content: JSON.stringify({ row: { ...input.template, name: `Generated ${snapshot.attribute_set}` }, warnings: [], cellWarnings: [] }) } }] }, input);
       return { sku: id, snapshot, status: index === 1 ? 'failed' : 'completed', attempts: 1,
         result: { ...snapshot, catalog_state: { ...generated, row: index === 1 ? undefined : generated.row,
@@ -499,7 +500,7 @@ try {
   const failedShippingBook = new ExcelJS.Workbook();await failedShippingBook.xlsx.load(await readFile((await failedShipping.path())!));
   assert.equal(failedShippingBook.worksheets[0].rowCount, 4, 'One shipping file includes every category, including failed Catalog SKUs');
   const hubItem = additionalRuns[multiJob.id].items[1];
-  const hubInput = prepareCatalogInput(hubItem.snapshot, { attributeSet: 'Hub', rulesMarkdown: rules, headers: hubHeaders }, 40000);
+  const hubInput = prepareCatalogInput(hubItem.snapshot, { attributeSet: 'Hub', rulesMarkdown: rules, headers: hubHeaders }, memory, 40000);
   const hubGenerated = parseCatalogResponse({ choices: [{ message: { content: JSON.stringify({ row: { ...hubInput.template, name: 'Generated Hub' }, warnings: [], cellWarnings: [] }) } }] }, hubInput);
   Object.assign(hubItem.result.catalog_state, hubGenerated, { status: 'completed', error: null });
   hubItem.status = 'completed'; additionalRuns[multiJob.id].status = 'completed';multiJob.status = 'completed';

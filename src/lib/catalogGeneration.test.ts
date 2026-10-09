@@ -9,6 +9,7 @@ const headers = ['sku', 'base_code', 'attribute_set', 'attributes__lulu_ean', 'a
   'attributes__Shipment_Type', 'attributes__Common_Item_Whippy', 'attributes__fallback', 'name', 'attributes__color',
   'attributes__shipping_weight', 'attributes__brand', 'attributes__lulu_product_type'];
 const rules = '# Example\n\nname: use the sourced brand and model; example: TestBrand USB Hub.\nattributes__color: leave blank if unsourced.\nattributes__fallback: default to No when empty.';
+const memory = 'Use sentence case for generated titles. Return a QA verdict when reviewing products.';
 const legacyRules = `## Catalog Headers\n\n\`\`\`text\n${headers.join('\n')}\n\`\`\`\n\n${rules}`;
 assert.deepEqual(parseCatalogHeaders(legacyRules), headers);
 assert.deepEqual(parseCatalogHeaders(legacyRules.replaceAll('\n', '\r\n')), headers);
@@ -42,7 +43,19 @@ const sku: SkuData = { sku: '00042', attribute_set: 'TV', revision: 3, status: '
   upload_attributes: { lulu_ean: '0001234567890', Shipping_Attribute: '001', Shipment_Type: 'Normal', Common_Item_Whippy: 'No' },
   source: { sap: 'Brand: TestBrand; Model: USB Hub', url: 'https://example.com/product' } };
 const original = structuredClone(sku);
-const input = prepareCatalogInput(sku, mapping, 40000);
+const input = prepareCatalogInput(sku, mapping, memory, 40000);
+assert.ok(input.messages[0].content.includes(`GLOBAL INSTRUCTIONS\n${memory}`));
+assert.ok(input.messages[0].content.includes(`CATEGORY MAPPING\n${rules}`));
+assert.match(input.messages[0].content, /Category rules take precedence for category-specific checks/);
+assert.match(input.messages[0].content, /APPLICATION OUTPUT REQUIREMENTS \(take precedence over global instructions and category mapping\)/);
+assert.match(input.messages[0].content, /defaults from the global instructions and category mapping/);
+assert.deepEqual(Object.keys(JSON.parse(input.messages[1].content).template), headers);
+const hubRules = 'Hub-only rule: include sourced port count in the title.';
+const hubInput = prepareCatalogInput({ ...sku, attribute_set: 'Hub' }, { attributeSet: 'Hub', rulesMarkdown: hubRules, headers: [...headers].reverse() }, memory, 40000);
+assert.ok(hubInput.messages[0].content.includes(memory));
+assert.ok(hubInput.messages[0].content.includes(hubRules));
+assert.ok(!hubInput.messages[0].content.includes(rules), 'Only the selected category rules are supplied');
+assert.deepEqual(Object.keys(JSON.parse(hubInput.messages[1].content).template), [...headers].reverse());
 assert.equal(input.template.attributes__lulu_ean, '0001234567890');
 assert.equal(input.template.attributes__Shipping_Attribute, '001');
 assert.equal(input.template.base_code, '00001');
@@ -61,21 +74,21 @@ assert.equal(protectedOutput.row.attributes__brand, '', 'Blank pass-through valu
 assert.ok(protectedOutput.warnings.some(warning => warning.includes('Blank pass-through value for attributes__brand')));
 assert.equal(protectedOutput.row.attributes__lulu_product_type, '', 'Blank product types remain blank');
 const canonicalSku = { ...sku, raw_row: { ...sku.raw_row, attributes__lulu_product_type: ' 000Accessory ', attributes__product_type: 'Obsolete type' } };
-const canonicalInput = prepareCatalogInput(canonicalSku, mapping, 40000);
+const canonicalInput = prepareCatalogInput(canonicalSku, mapping, memory, 40000);
 assert.equal(canonicalInput.template.attributes__lulu_product_type, ' 000Accessory ');
 assert.ok(canonicalInput.messages[0].content.includes('attributes__lulu_product_type'));
 assert.equal(parseCatalogResponse(response({ row: { ...canonicalInput.template, attributes__lulu_product_type: 'MODEL CHANGE' }, warnings: [], cellWarnings: [] }), canonicalInput).row.attributes__lulu_product_type, ' 000Accessory ');
 assert.equal(catalogPassThroughValue({ ...canonicalSku, raw_row: { ...canonicalSku.raw_row, attributes__lulu_product_type: '' } }, 'attributes__lulu_product_type'), '', 'Canonical blank values take precedence over old values');
 assert.equal(catalogPassThroughValue({ ...canonicalSku, raw_row: { ...canonicalSku.raw_row, attributes__lulu_product_type: null } }, 'attributes__lulu_product_type'), '', 'Explicit canonical null cells stay blank');
 const legacySku = { ...sku, raw_row: { ...sku.raw_row, attributes__product_type: ' 000Legacy Hub ' } };
-assert.equal(prepareCatalogInput(legacySku, mapping, 40000).template.attributes__lulu_product_type, ' 000Legacy Hub ', 'Earlier uploads retain their original pass-through value');
+assert.equal(prepareCatalogInput(legacySku, mapping, memory, 40000).template.attributes__lulu_product_type, ' 000Legacy Hub ', 'Earlier uploads retain their original pass-through value');
 assert.equal(catalogPassThroughValue({ ...sku, raw_row: { ...sku.raw_row, attributes__product_type: null }, upload_attributes: { ...sku.upload_attributes, product_type: 'Conflicting value' } }, 'attributes__lulu_product_type'), '', 'Legacy null cells also remain blank');
 assert.equal(catalogPassThroughValue({ ...sku, upload_attributes: { ...sku.upload_attributes, product_type: 'Legacy attribute' } }, 'attributes__lulu_product_type'), 'Legacy attribute');
 assert.equal(catalogPassThroughValue({ ...legacySku, upload_attributes: { ...sku.upload_attributes, lulu_product_type: 'Current attribute' } }, 'attributes__lulu_product_type'), 'Current attribute');
-const legacyRunInput = prepareCatalogInput({ ...legacySku, raw_row: { ...legacySku.raw_row, attributes__product_type: '' } }, { ...mapping, headers: legacyHeaders }, 40000);
+const legacyRunInput = prepareCatalogInput({ ...legacySku, raw_row: { ...legacySku.raw_row, attributes__product_type: '' } }, { ...mapping, headers: legacyHeaders }, memory, 40000);
 assert.equal(parseCatalogResponse(response({ row: { ...legacyRunInput.template, attributes__product_type: 'MODEL CHANGE' }, warnings: [], cellWarnings: [] }), legacyRunInput).row.attributes__product_type, '', 'Admitted legacy runs preserve blank product-type values');
 assert.deepEqual(legacySku.raw_row, { ...sku.raw_row, attributes__product_type: ' 000Legacy Hub ' }, 'Compatibility never rewrites uploaded rows');
-const unusualInput = prepareCatalogInput(sku, { ...mapping, headers: [...headers, 'constructor', '__proto__', 'toString'] }, 40000);
+const unusualInput = prepareCatalogInput(sku, { ...mapping, headers: [...headers, 'constructor', '__proto__', 'toString'] }, memory, 40000);
 for (const header of ['constructor', '__proto__', 'toString']) assert.equal(unusualInput.template[header], '');
 const unusualOutput = parseCatalogResponse(response({ row: { ...unusualInput.template, constructor: 'Constructor', ['__proto__']: 'Prototype', toString: 'String' }, warnings: [], cellWarnings: [] }), unusualInput);
 assert.equal(unusualOutput.row.constructor, 'Constructor');
@@ -100,27 +113,27 @@ for (const extras of [{ finish_reason: 'length' }, { finish_reason: 'content_fil
   assert.throws(() => parseCatalogResponse(response({ row, warnings: [], cellWarnings: [] }, extras), input));
 }
 assert.throws(() => parseCatalogResponse({ choices: [{ message: { content: '```json\n{}\n```' } }] }, input));
-assert.throws(() => prepareCatalogInput({ ...sku, source: {} }, mapping, 40000));
-assert.ok(prepareCatalogInput({ ...sku, scraped_markdown: 'Long web evidence', scrape_metadata: { method: 'manual', requestedUrl: null, finalUrl: null, capturedAt: null } }, mapping, 4).warnings.length);
+assert.throws(() => prepareCatalogInput({ ...sku, source: {} }, mapping, memory, 40000));
+assert.ok(prepareCatalogInput({ ...sku, scraped_markdown: 'Long web evidence', scrape_metadata: { method: 'manual', requestedUrl: null, finalUrl: null, capturedAt: null } }, mapping, memory, 4).warnings.length);
 
 const operationalSku = { ...sku, raw_row: { ...sku.raw_row, source__attribute_set: 'TV', attributes__attribute_set: 'Uploaded category',
   attribute__shipping_attribute: '001', attribute__shipment_type: 'Normal', attribute__common_item_whippy: 'No', attribute__fallback: '' },
   upload_attributes: { ...sku.upload_attributes, attribute_set: 'Uploaded category', shipping_attribute: '001', shipment_type: 'Normal', common_item_whippy: 'No' } };
 const operationalMapping = { ...mapping, headers: Object.keys(operationalSku.raw_row) };
-const operationalInput = prepareCatalogInput(operationalSku, operationalMapping, 40000);
+const operationalInput = prepareCatalogInput(operationalSku, operationalMapping, memory, 40000);
 assert.equal(operationalInput.template.source__attribute_set, 'TV');
 assert.equal(operationalInput.template.attributes__attribute_set, 'TV');
 assert.equal(operationalInput.template.attribute__shipping_attribute, '001');
 assert.equal(operationalInput.template.attribute__shipment_type, 'Normal');
 assert.equal(operationalInput.template.attribute__common_item_whippy, 'No');
 assert.equal(operationalInput.template.attribute__fallback, '');
-assert.equal(prepareCatalogInput({ ...operationalSku, upload_attributes: { ...operationalSku.upload_attributes, shipping_attribute: '002' } }, operationalMapping, 40000).template.attribute__shipping_attribute, '002', 'Shared evidence edits also apply to singular attribute headers');
+assert.equal(prepareCatalogInput({ ...operationalSku, upload_attributes: { ...operationalSku.upload_attributes, shipping_attribute: '002' } }, operationalMapping, memory, 40000).template.attribute__shipping_attribute, '002', 'Shared evidence edits also apply to singular attribute headers');
 const operationalOutput = parseCatalogResponse(response({ row: { ...operationalInput.template, attribute__shipping_attribute: 'MODEL CHANGE', attribute__fallback: 'No' }, warnings: [], cellWarnings: [] }), operationalInput);
 assert.equal(operationalOutput.row.attribute__shipping_attribute, '001');
 assert.equal(operationalOutput.row.attribute__fallback, 'No');
 const overlappingSku = { ...operationalSku, raw_row: { ...operationalSku.raw_row, attribute__fallback: 'No', attributes__fallback: 'Yes' },
   upload_attributes: { ...operationalSku.upload_attributes, fallback: 'Yes' } };
-const overlappingInput = prepareCatalogInput(overlappingSku, { ...mapping, headers: ['sku', 'attribute__fallback', 'attributes__fallback'] }, 40000);
+const overlappingInput = prepareCatalogInput(overlappingSku, { ...mapping, headers: ['sku', 'attribute__fallback', 'attributes__fallback'] }, memory, 40000);
 assert.equal(overlappingInput.template.attribute__fallback, 'No');
 assert.equal(overlappingInput.template.attributes__fallback, 'Yes', 'Extra columns with another prefix retain their own supplied values');
 
@@ -157,8 +170,9 @@ const conflictSku = { ...sku, raw_row: { ...sku.raw_row, name: '  Uploaded ال�
   source: { sap: 'Brand: Samsung; Model: QN90F; Colour: Black', url: 'https://example.com/product' },
   scraped_markdown: '# Samsung QN90F\nColour: White\nPrice: AED 4,999',
   scrape_metadata: { method: 'manual' as const, requestedUrl: null, finalUrl: null, capturedAt: null } };
-const conflictInput = prepareCatalogInput(conflictSku, mapping, 40000);
+const conflictInput = prepareCatalogInput(conflictSku, mapping, memory, 40000);
 assert.equal(JSON.parse(conflictInput.messages[1].content).scraped_markdown, conflictSku.scraped_markdown);
+assert.equal(JSON.parse(conflictInput.messages[1].content).source_sap, conflictSku.source.sap);
 const nameWarning = { header: 'name', message: 'Uploaded name "Uploaded العربية TV" differs from SAP model QN90F; review product identity. ' };
 const secondNameWarning = { header: 'name', message: 'The mapping requires the sourced brand in the name; the uploaded name omits Samsung.' };
 const brandWarning = { header: 'attributes__brand', message: 'UploadedBrand differs from SAP brand Samsung; preserve the uploaded value for review.' };

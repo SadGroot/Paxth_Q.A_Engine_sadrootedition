@@ -5,6 +5,7 @@ import { CATALOG_PASS_THROUGH_HEADERS, prepareCatalogInput } from './catalogGene
 import { SHIPPING_REGIONS, shippingRegion, prepareShipping, prepareCatalogOutputs, catalogMappingFor, completedCatalogGroups, populateCatalogFile } from './catalogFiles';
 import { validateCatalogImport, validateJob } from '../server/catalog';
 
+const memory = 'Use only supplied product evidence.';
 const product: SkuData = { sku: '00042', attribute_set: 'TV', revision: 1, status: 'ready',
   source: { url: 'https://example.com/product' }, upload_attributes: {}, raw_row: {
     sku: '00042', base_code: '00001', attributes__region: 'UAE', attributes__lulu_ean: '0001234567890',
@@ -16,7 +17,7 @@ const fixed = ['sku', 'base_code', 'attributes__erp_shipping_attribute', 'attrib
   'attributes__erp_shipping_attribute_qtr', 'attributes__erp_shipping_attribute_oman', 'attributes__erp_shipping_attribute_ksa',
   'attributes__erp_shipping_attribute_bahrain', 'attributes__erp_shipment_type_uae', 'attributes__erp_shipment_type_kwt',
   'attributes__erp_shipment_type_qtr', 'attributes__erp_shipment_type_oman', 'attributes__erp_shipment_type_ksa', 'attributes__erp_shipment_type_bahrain'];
-const fallbacks = ['fallback_uae', 'fallback_kuwait', 'fallback_qatar', 'fallback_oman', 'fallback_ksa', 'fallback_bahrain'];
+const fallbacks = ['attributes__fallback_uae', 'attributes__fallback_kuwait', 'attributes__fallback_qatar', 'attributes__fallback_oman', 'attributes__fallback_ksa', 'attributes__fallback_bahrain'];
 for (const [index, region] of SHIPPING_REGIONS.entries()) {
   const original = { ...product, raw_row: { ...product.raw_row, attributes__region: ` ${region.toUpperCase()} ` } };
   const shipping = prepareShipping([original]);
@@ -29,6 +30,8 @@ for (const [index, region] of SHIPPING_REGIONS.entries()) {
   assert.equal(shipping.rows[0][shipping.headers[8 + index]], 'Express');
   assert.equal(shipping.rows[0][shipping.headers[14]], '0007');
   assert.equal(shipping.rows[0][shipping.headers[15]], '');
+  const withFallback = prepareShipping([{ ...original, raw_row: { ...original.raw_row, attribute__fallback: ' 0009 ' } }]);
+  assert.equal(withFallback.rows[0][fallbacks[index]], ' 0009 ', 'Fallback values keep whitespace and leading zeroes');
   for (let other = 0; other < 6; other++) if (other !== index) {
     assert.equal(shipping.rows[0][shipping.headers[2 + other]], 'Courier delivery');
     assert.equal(shipping.rows[0][shipping.headers[8 + other]], 'Scheduled');
@@ -61,7 +64,7 @@ assert.deepEqual(outputs.shipping!.rows.map(row => row.sku), ['00042', '00043', 
 assert.equal(outputs.groups[0].rows[0].attributes__brand, ' TestBrand ');
 assert.equal(outputs.groups[0].rows[0].attributes__shipping_weight, '');
 assert.equal(outputs.groups[0].rows[0].name, '');
-assert.throws(() => prepareCatalogInput(product, mappings[0], 40000), /no usable SAP/, 'URL-only creation does not require scraped evidence');
+assert.throws(() => prepareCatalogInput(product, mappings[0], memory, 40000), /no usable SAP/, 'URL-only creation does not require scraped evidence');
 assert.deepEqual(catalogMappingFor({ catalogMapping: mappings[0] }, 'TV'), mappings[0]);
 assert.deepEqual(catalogMappingFor({ catalogMappings: mappings }, 'Hub'), mappings[1]);
 assert.throws(() => catalogMappingFor({ catalogMappings: mappings }, 'Missing'));
