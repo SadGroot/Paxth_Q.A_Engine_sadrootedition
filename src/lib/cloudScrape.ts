@@ -1,5 +1,6 @@
 import { lookup } from 'node:dns/promises';
 import { bufferResponse } from './chatCompletion';
+import { extractImageGalleries, type ImageGallery } from './productImages';
 import { ScrapeError, resolvePublicAddress, validateScrapeInput, type ScrapeReport } from './scrapeNetwork';
 export { ScrapeError, isPublicAddress, validateScrapeInput } from './scrapeNetwork';
 export type { ScrapeReport } from './scrapeNetwork';
@@ -10,6 +11,7 @@ export type ScrapedPage = {
   method?: 'cloud' | 'browser'; receivedAt?: string; crawler?: 'crawl4ai'; modelName?: string;
 };
 export type ScrapePreview = ScrapedPage & { status: 'collected' | 'partial'; capturedAt: string | null; report: ScrapeReport };
+export type CollectedPage = ScrapePreview & { imageGalleries?: ImageGallery[] };
 
 export function getScraperApiKey() {
   const key = process.env.CRAWL4AI_API_KEY?.trim();
@@ -64,7 +66,7 @@ function cloudFailure(status: number, reason: unknown) {
   return new ScrapeError(`Crawl4AI could not retrieve readable page content (HTTP ${status}).`, 502, 'PAGE_UNAVAILABLE');
 }
 
-export async function collectPage(rawUrl: string, signal: AbortSignal, resolve = lookup): Promise<ScrapePreview> {
+export async function collectPage(rawUrl: string, signal: AbortSignal, resolve = lookup): Promise<CollectedPage> {
   if (signal.aborted) throw new ScrapeError('URL retrieval was cancelled.', 499, 'CANCELLED');
   const apiKey = getScraperApiKey();
   const { url } = validateScrapeInput({ url: rawUrl });
@@ -81,7 +83,7 @@ export async function collectPage(rawUrl: string, signal: AbortSignal, resolve =
     const response = await fetch('https://api.crawl4ai.com/scrape', {
       method: 'POST', redirect: 'error',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify({ url, format: 'md' }), signal: execution,
+      body: JSON.stringify({ url, format: 'both', parse: { media: true } }), signal: execution,
     });
     const buffered = await bufferResponse(response, execution, new ScrapeError('Crawl4AI response exceeded 4 MiB.', 413, 'CONTENT_TOO_LARGE'));
     const receivedAt = new Date().toISOString();
@@ -90,12 +92,18 @@ export async function collectPage(rawUrl: string, signal: AbortSignal, resolve =
     if (!data || data.ok !== true) throw new ScrapeError('Crawl4AI returned an invalid or unsuccessful response.', 502, 'INVALID_RESPONSE');
     if (typeof data.markdown !== 'string' || !data.markdown.trim()) throw new ScrapeError('Crawl4AI returned no readable page content.', 502, 'EMPTY_PAGE');
     if (data.markdown.length > MAX_SCRAPE_CHARACTERS) throw new ScrapeError('The extracted page exceeds 200,000 characters.', 413, 'CONTENT_TOO_LARGE');
+    const imageGalleries = extractImageGalleries(data.html, data.parse?.media?.images, url);
+    const markdown = data.markdown;
+    if (markdown.length + (imageGalleries.length ? JSON.stringify(imageGalleries).length : 0) > MAX_SCRAPE_CHARACTERS) {
+      throw new ScrapeError('The extracted page with image URLs exceeds 200,000 characters.', 413, 'CONTENT_TOO_LARGE');
+    }
     execution.throwIfAborted();
     report.durationMs = Math.round(performance.now() - started);
-    report.characters = data.markdown.length;
+    report.characters = markdown.length;
     // shortcut: the cloud contract does not report redirects or capture time, record them only when the API supports them.
-    return { status: 'collected', method: 'cloud', crawler: 'crawl4ai', markdown: data.markdown,
-      requestedUrl: url, finalUrl: null, capturedAt: null, receivedAt, report };
+    return { status: 'collected', method: 'cloud', crawler: 'crawl4ai', markdown,
+      requestedUrl: url, finalUrl: null, capturedAt: null, receivedAt, report,
+      ...(imageGalleries.length ? { imageGalleries } : {}) };
   } catch (error) {
     const cause = (error as { cause?: { code?: unknown; errors?: Array<{ code?: unknown }> } })?.cause;
     const codes = [(error as { code?: unknown })?.code, cause?.code, ...(Array.isArray(cause?.errors) ? cause.errors.map(item => item?.code) : [])];

@@ -1,4 +1,4 @@
-import { collectPage, getScraperApiKey, MAX_SCRAPE_CHARACTERS, ScrapeError, type ScrapePreview } from '../lib/cloudScrape';
+import { collectPage, getScraperApiKey, MAX_SCRAPE_CHARACTERS, ScrapeError, type CollectedPage, type ScrapePreview } from '../lib/cloudScrape';
 import { ProviderError } from '../lib/chatCompletion';
 import { extractLLMResponseContent } from '../lib/llmResponse';
 import { DEFAULT_SETTINGS, type AppSettings } from '../lib/providerSettings';
@@ -12,10 +12,11 @@ Preserve requested-product identity, exact identifiers, every nonduplicate speci
 Preserve unfamiliar currency symbols literally. Omit ambiguous merged label/value text rather than interpreting it as a new number or percentage.
 Price and availability: include only clearly attributed listing prices, sale prices, currencies, and stock status for this product and variant/seller. Never output ambiguous, unrelated, mixed-region, or unrendered prices, even as examples or explanations. Delete template placeholders and their incomplete rows.
 Delivery and Warranty: retain only the listing's delivery terms and the product's included warranty. Exclude optional paid protection plans, add-ons, financing, bank offers, discount codes, rewards, and trade-in offers everywhere in the output.
-Use a two-column specification table where appropriate. Relevant links may point only to this product, its images, model-specific support, or manuals. Remove category/store pages, general contact/navigation links, advertisements, and other products' links.
+Use a two-column specification table where appropriate. Relevant links may point only to this product, model-specific support, or manuals. Remove category/store pages, general contact/navigation links, advertisements, and other products' links.
+Select all supplied imageGalleries representing the main product's image carousel and its corresponding full/zoom galleries for the selected variant. Return their exact IDs in selectedGalleryIds. Keep every slide within those galleries, including feature graphics, lifestyle images, certification graphics, and included accessories. Prefer complete product image galleries over isolated copies or thumbnail navigation. Exclude separate feature/benefit sliders, highlight icons, award/logo strips, and promotional illustrations elsewhere on the page, even when they describe this same product. Exclude navigation, advertisements, other products, and unclear galleries; use [] when none are supplied or relevant. Never output image URLs, embedded images, gallery descriptions, or a Product images heading in markdown; the server appends every unique image in the selected galleries at its highest advertised resolution.
 Remove advertisements, related-product recommendations, cookie banners, promotional boilerplate, seller reputation metrics, duplicate content, JavaScript, and templates. Do not quote or describe removed junk or explain omissions.
 Do not invent, infer, translate, browse, fill missing values, or combine other products with the requested product.
-Return Markdown only, without a surrounding code fence, commentary, or a source footer; the server appends source URLs.`;
+Return a JSON object with exactly markdown (a nonempty Markdown string) and selectedGalleryIds (an array of supplied gallery ID strings), without a surrounding code fence, commentary, or a source footer; the server appends source URLs.`;
 
 function requireProvider(signal: AbortSignal) {
   signal.throwIfAborted();
@@ -24,7 +25,7 @@ function requireProvider(signal: AbortSignal) {
   getScraperApiKey();
 }
 
-async function structurePage(page: ScrapePreview, settings: AppSettings, signal: AbortSignal): Promise<ScrapePreview> {
+async function structurePage(page: CollectedPage, settings: AppSettings, signal: AbortSignal): Promise<ScrapePreview> {
   const started = performance.now();
   const execution = AbortSignal.any([signal, AbortSignal.timeout(120_000)]);
   const primary = AbortSignal.any([execution, AbortSignal.timeout(60_000)]);
@@ -34,7 +35,8 @@ async function structurePage(page: ScrapePreview, settings: AppSettings, signal:
       temperature: 0.1, max_tokens: 16_384,
       messages: [
         { role: 'system', content: FORMAT_INSTRUCTIONS },
-        { role: 'user', content: JSON.stringify({ requestedUrl: page.requestedUrl, finalUrl: page.finalUrl, content: page.markdown }) },
+        { role: 'user', content: JSON.stringify({ requestedUrl: page.requestedUrl, finalUrl: page.finalUrl, content: page.markdown,
+          imageGalleries: (page.imageGalleries || []).map(gallery => ({ ...gallery, images: gallery.images.map(({ url, alt }) => ({ url, alt })) })) }) },
       ],
     };
     let response;
@@ -57,12 +59,27 @@ async function structurePage(page: ScrapePreview, settings: AppSettings, signal:
     if (choice?.message?.refusal || choice?.finish_reason !== 'stop') {
       throw new ProviderError('Markdown conversion was refused, truncated, or did not finish.');
     }
-    const content = extractLLMResponseContent(response).trim();
-    if (!content) throw new ProviderError('Markdown conversion returned an empty response.');
-    const markdown = `${content}\n\nSource: <${page.requestedUrl}>${page.finalUrl && page.finalUrl !== page.requestedUrl ? `\nRetrieved URL: <${page.finalUrl}>` : ''}`;
+    let converted: any;
+    try { converted = JSON.parse(extractLLMResponseContent(response)); }
+    catch { throw new ProviderError('Markdown conversion returned invalid JSON.'); }
+    const galleries = page.imageGalleries || [];
+    if (!converted || typeof converted.markdown !== 'string' || !converted.markdown.trim() ||
+        !Array.isArray(converted.selectedGalleryIds) || converted.selectedGalleryIds.some((id: unknown) => typeof id !== 'string' || !galleries.some(gallery => gallery.id === id)) ||
+        Object.keys(converted).some(key => !['markdown', 'selectedGalleryIds'].includes(key)) ||
+        /^#{1,6}\s+Product images\b/im.test(converted.markdown)) {
+      throw new ProviderError('Markdown conversion returned invalid Markdown or gallery selections.');
+    }
+    const content = converted.markdown.trim().replace(/^(- )(https?:\/\/[^\s<>]+)$/gm, '$1<$2>');
+    const imageUrls = new Map<string, string>();
+    for (const gallery of galleries) if (converted.selectedGalleryIds.includes(gallery.id)) {
+      for (const image of gallery.images) imageUrls.set(image.identity, image.url);
+    }
+    const imageSection = imageUrls.size ? `\n\n## Product images\n\n${[...imageUrls.values()].map(url => `- <${url}>`).join('\n')}` : '';
+    const markdown = `${content}${imageSection}\n\nSource: <${page.requestedUrl}>${page.finalUrl && page.finalUrl !== page.requestedUrl ? `\nRetrieved URL: <${page.finalUrl}>` : ''}`;
     if (markdown.length > MAX_SCRAPE_CHARACTERS) throw new ScrapeError('Markdown cleanup failed: structured Markdown exceeds 200,000 characters.', 413, 'CONTENT_TOO_LARGE');
     execution.throwIfAborted();
-    return { ...page, markdown, crawler: 'crawl4ai', modelName,
+    const { imageGalleries: _imageGalleries, ...publicPage } = page;
+    return { ...publicPage, markdown, crawler: 'crawl4ai', modelName,
       report: { ...page.report, characters: markdown.length, durationMs: page.report.durationMs + Math.round(performance.now() - started),
         warnings: [...page.report.warnings, ...(modelName === settings.scraperModelName ? [] : [{ code: 'MODEL_FALLBACK', message: `Markdown cleanup used ${modelName} because the selected model was temporarily unavailable.` }])] } };
   } catch (error) {

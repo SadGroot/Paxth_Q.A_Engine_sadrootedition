@@ -16,8 +16,8 @@ const page: ScrapePreview = { status: 'collected', markdown: '# منتج café �
   report: { durationMs: 2, characters: 50, clicks: 0, scrolls: 1, warnings: [], unresolvedControls: [] } };
 let collections = 0, requests: any[] = [];
 const collect = async () => { collections++; return page; };
-const response = (content: unknown = '# Product\n\n| Weight | 12.75 kg |', finish_reason = 'stop', refusal?: string) =>
-  Response.json({ choices: [{ finish_reason, message: { content, ...(refusal ? { refusal } : {}) } }] });
+const response = (markdown: unknown = '# Product\n\n| Weight | 12.75 kg |', finish_reason = 'stop', refusal?: string, selectedGalleryIds: unknown = []) =>
+  Response.json({ choices: [{ finish_reason, message: { content: JSON.stringify({ markdown, selectedGalleryIds }), ...(refusal ? { refusal } : {}) } }] });
 try {
   delete process.env.CRAWL4AI_API_KEY;
   await assert.rejects(collectProductPage(url, AbortSignal.timeout(5000), settings, collect), { code: 'SCRAPER_NOT_CONFIGURED' });
@@ -100,6 +100,56 @@ try {
   const cloudResult = await scrapeProductPage('https://8.8.8.8/product', AbortSignal.timeout(5000), { ...settings, scraperModelName: 'z-ai/glm-5.3-flash' });
   assert.deepEqual(stages, ['cloud', 'model', 'model'], 'Cleanup retries retain the original cloud Markdown and release retrieval admission');
   assert.equal(cloudResult.method, 'cloud'); assert.equal(cloudResult.finalUrl, null); assert.equal(cloudResult.capturedAt, null);
+  const imageUrl = 'https://cdn.example.com/gallery/product-front.jpg?w=2000&token=a%2Fb+$x$';
+  const sideImageUrl = 'https://cdn.example.com/gallery/product-side.jpg?w=1600';
+  const unrelatedImageUrl = 'https://cdn.example.com/other-product.jpg';
+  const cleanedText = '# Product\n\nWeight: 12.75 kg';
+  const cleanedImages = `${cleanedText}\n\n## Product images\n\n- <${imageUrl}>\n- <${sideImageUrl}>`;
+  const imageStages: string[] = [];
+  globalThis.fetch = async (destination, init) => {
+    if (String(destination) === 'https://api.crawl4ai.com/scrape') {
+      imageStages.push('cloud');
+      assert.deepEqual(JSON.parse(init!.body as string), { url: 'https://8.8.8.8/product', format: 'both', parse: { media: true } });
+      return Response.json({ ok: true, markdown: page.markdown,
+        html: `<section id="main-gallery"><img src="${imageUrl.replace('2000', '400')}" data-zoom-src="${imageUrl.replace('https:', '')}" alt="Main product front"><img data-src="${sideImageUrl}" alt="Main product side"></section><section id="related-gallery"><img src="${unrelatedImageUrl}" alt="Other product"></section>`,
+        parse: { media: { images: [{ src: imageUrl, alt: 'Main product front' }] } } });
+    }
+    imageStages.push('model');
+    const input = JSON.parse(init!.body as string);
+    const instructions = input.messages[0].content;
+    assert.match(instructions, /main product's image carousel and its corresponding full\/zoom galleries/);
+    assert.match(instructions, /server appends every unique image/);
+    const evidence = JSON.parse(input.messages[1].content);
+    assert.equal(evidence.content, page.markdown, 'Image collection retains the original Unicode product evidence');
+    const selected = evidence.imageGalleries.find((gallery: any) => gallery.label === 'main-gallery');
+    assert.deepEqual(selected.images.map((image: any) => image.url), [imageUrl, sideImageUrl]);
+    assert.ok(!('identity' in selected.images[0]), 'Internal asset keys stay out of model input');
+    return response(cleanedText, 'stop', undefined, [selected.id, selected.id]);
+  };
+  for (const scrape of [collectProductPage, scrapeProductPage]) {
+    const imageResult = await scrape('https://8.8.8.8/product', AbortSignal.timeout(5000), settings);
+    assert.equal(imageResult.markdown, `${cleanedImages}\n\nSource: <https://8.8.8.8/product>`);
+    assert.equal(imageResult.report.characters, imageResult.markdown.length);
+    assert.ok(!imageResult.markdown.includes(unrelatedImageUrl));
+    assert.ok(!imageResult.markdown.includes('Page image candidates'));
+    assert.ok(!('imageGalleries' in imageResult), 'Raw gallery records never change the public response shape');
+  }
+  assert.deepEqual(imageStages, ['cloud', 'model', 'cloud', 'model'], 'Preview and saved evidence use one media-enabled collection each');
+  for (const ids of [null, {}, [1], ['invented-gallery']]) {
+    globalThis.fetch = async () => response(cleanedText, 'stop', undefined, ids);
+    await assert.rejects(scrapeProductPage(url, AbortSignal.timeout(5000), settings, collect), { code: 'CONVERSION_FAILED' });
+  }
+  for (const body of ['not JSON', '[]', '{"markdown":"Product"}', '{"markdown":42,"selectedGalleryIds":[]}',
+    '{"markdown":"Product","selectedGalleryIds":[],"extra":true}']) {
+    globalThis.fetch = async () => Response.json({ choices: [{ finish_reason: 'stop', message: { content: body } }] });
+    await assert.rejects(scrapeProductPage(url, AbortSignal.timeout(5000), settings, collect), { code: 'CONVERSION_FAILED' });
+  }
+  globalThis.fetch = async () => response('# Product\n\n## Product images\n\n- <https://invented.example/image.jpg>');
+  await assert.rejects(scrapeProductPage(url, AbortSignal.timeout(5000), settings, collect), { code: 'CONVERSION_FAILED' });
+  globalThis.fetch = async () => response('x'.repeat(199980), 'stop', undefined, ['gallery-1']);
+  await assert.rejects(scrapeProductPage(url, AbortSignal.timeout(5000), settings, async () => ({ ...page,
+    imageGalleries: [{ id: 'gallery-1', label: 'Main product', images: [{ identity: imageUrl, url: imageUrl, alt: 'Front' }] }],
+  })), { code: 'CONTENT_TOO_LARGE' });
   const fallbackRequests: any[] = [];
   let fallbackCollections = 0;
   globalThis.fetch = async (_destination, init) => {

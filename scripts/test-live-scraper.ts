@@ -3,7 +3,7 @@ import 'dotenv/config';
 import assert from 'node:assert/strict';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { collectPage, getScraperApiKey, ScrapeError, type ScrapePreview } from '../src/lib/cloudScrape';
+import { collectPage, getScraperApiKey, ScrapeError, type CollectedPage } from '../src/lib/cloudScrape';
 import { collectProductPage } from '../src/server/scrapePipeline';
 import { DEFAULT_SETTINGS } from '../src/lib/providerSettings';
 import { getProviderCredentials } from '../src/server/provider';
@@ -22,12 +22,13 @@ const normalize = (text: string) => text.toLowerCase().replace(/[\s,*|]/g, '');
 for (const [index, item] of cases.entries()) {
   if (filter && !item.name.toLowerCase().includes(filter)) continue;
   const started = Date.now();
-  let raw: ScrapePreview | undefined;
+  let raw: CollectedPage | undefined;
   let record: any = { ...item, model: DEFAULT_SETTINGS.scraperModelName, testedAt: new Date().toISOString() };
   try {
     const structured = await collectProductPage(item.url, AbortSignal.timeout(300_000), DEFAULT_SETTINGS, async (url, signal) => {
       raw = await collectPage(url, signal);
       await writeFile(path.join(folder, `${index + 1}-raw.md`), raw.markdown);
+      await writeFile(path.join(folder, `${index + 1}-galleries.json`), JSON.stringify(raw.imageGalleries || [], null, 2));
       return raw;
     });
     await writeFile(path.join(folder, `${index + 1}-structured.md`), structured.markdown);

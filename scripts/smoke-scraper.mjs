@@ -30,7 +30,7 @@ await writeFile(preload, `globalThis.fetch=async(url,init)=>{
   if(String(url)!=='https://mock.scrape.example/v1/chat/completions')throw new Error('Unexpected outbound destination');
   if(new Headers(init.headers).get('Authorization')!=='Bearer mock-only')throw new Error('Model credential isolation failed');
   const input=JSON.parse(JSON.parse(init.body).messages.find(message=>message.role==='user').content);
-  if(input.content)return Response.json({choices:[{finish_reason:'stop',message:{content:input.content}}]});
+  if(input.content)return Response.json({choices:[{finish_reason:'stop',message:{content:JSON.stringify({markdown:input.content,selectedGalleryIds:[]})}}]});
   await new Promise(resolve=>setTimeout(resolve,5000));
   return Response.json({choices:[{finish_reason:'stop',message:{content:JSON.stringify({qa_status:'pass',confidence:'high',summary:'Mock review of supplied evidence',issue_count:0,issues:[],source_notes:{sap_used:!!input.source_sap,url_used:!!input.scraped_markdown,source_conflicts:[]}})}}]});
 };`);

@@ -16,7 +16,7 @@ import {registerScrapeRoutes} from './scraper';
 import {collectProductPage,scrapeProductPage} from './scrapePipeline';
 import type {AppSettings} from '../lib/providerSettings';
 import {ProviderError} from '../lib/chatCompletion';
-import {validateScrapeInput, ScrapeError, type ScrapePreview} from '../lib/cloudScrape';
+import {validateScrapeInput, ScrapeError, type CollectedPage} from '../lib/cloudScrape';
 import {DEFAULT_SETTINGS,editableSettings} from '../lib/providerSettings';
 import {CATALOG_INPUT_HEADERS,CATALOG_PASS_THROUGH_HEADERS} from '../lib/catalogGeneration';
 
@@ -32,14 +32,15 @@ let calls=0, providerMode='success';
 const providerRequests:any[]=[];
 const conversionRequests:any[]=[];
 const scrapeRequests:string[]=[];
-let scrapeBlocked=false, scrapePartial=false, conversionFailed=false, conversionUnavailable=false;
+let scrapeBlocked=false, scrapePartial=false, conversionFailed=false, conversionUnavailable=false, conversionInvalidGallery=false;
 let duringScrape: (()=>Promise<void>) | undefined;
-const collect=async(rawUrl:string, signal:AbortSignal):Promise<ScrapePreview>=>{
+const collect=async(rawUrl:string, signal:AbortSignal):Promise<CollectedPage>=>{
   const {url}=validateScrapeInput({url:rawUrl});signal.throwIfAborted();scrapeRequests.push(url);
   await duringScrape?.();signal.throwIfAborted();
   if(scrapeBlocked)throw new ScrapeError('The website blocked browser access.',502,'PAGE_BLOCKED');
   const markdown='# Retrieved product\nBrand: TestBrand\n\nSource: <'+url+'>';
   return {status:scrapePartial?'partial':'collected',markdown,method:'cloud',requestedUrl:url,finalUrl:null,capturedAt:null,receivedAt:new Date().toISOString(),
+    imageGalleries:[{id:'gallery-1',label:'Main product gallery',images:[{identity:'product-front',url:'https://cdn.example.com/product.jpg?w=2000',alt:'Front'}]}],
     report:{durationMs:10,characters:markdown.length,clicks:1,scrolls:2,warnings:scrapePartial?[{code:'UNRESOLVED_CONTROLS',message:'Specifications did not open.'}]:[],unresolvedControls:scrapePartial?['Specifications']:[]}};
 };
 const scrape=(url:string,signal:AbortSignal,settings:AppSettings)=>scrapeProductPage(url,signal,settings,collect);
@@ -52,7 +53,8 @@ const provider=createServer(async(req,res)=>{
     res.setHeader('Content-Type','application/json');
     if(conversionUnavailable && payload.model===DEFAULT_SETTINGS.scraperModelName){res.writeHead(500);res.end('{}');return;}
     if(conversionFailed){res.end(JSON.stringify({choices:[{finish_reason:'length',message:{content:'Incomplete conversion'}}]}));return;}
-    res.end(JSON.stringify({choices:[{finish_reason:'stop',message:{content:evidence.content}}]}));return;
+    res.end(JSON.stringify({choices:[{finish_reason:'stop',message:{content:JSON.stringify({markdown:evidence.content,
+      selectedGalleryIds:conversionInvalidGallery?['unknown-gallery']:evidence.imageGalleries.map((gallery:any)=>gallery.id)})}}]}));return;
   }
   providerRequests.push(payload);
   calls++;
@@ -218,6 +220,7 @@ try {
   assert.equal(scraped.body.scrape_metadata.method,'cloud');assert.match(scraped.body.scraped_markdown,/variant=42/);
   assert.equal(scraped.body.scrape_metadata.finalUrl,null);assert.equal(scraped.body.scrape_metadata.capturedAt,null);
   assert.ok(scraped.body.scrape_metadata.receivedAt);
+  assert.match(scraped.body.scraped_markdown,/## Product images\n\n- <https:\/\/cdn\.example\.com\/product\.jpg\?w=2000>/);
   assert.equal(calls,0);
   assert.equal((await request('/api/catalog/scrape-check/scrape','POST',{expectedRevision:0},user)).status,409);
   assert.equal((await request('/api/catalog/scrape-check','PUT',{source:{sap:'missing revision'}},user)).status,400);
@@ -235,6 +238,13 @@ try {
   const preserved=(await request('/api/catalog','GET',undefined,user)).body.find((row:any)=>row.sku==='scrape-check');
   assert.equal(preserved.scraped_markdown,scraped.body.scraped_markdown);assert.equal(preserved.revision,1);
   assert.deepEqual(preserved.scrape_metadata,scraped.body.scrape_metadata);
+  conversionInvalidGallery=true;
+  const invalidGallery=await request('/api/catalog/scrape-check/scrape','POST',{expectedRevision:1},user);
+  conversionInvalidGallery=false;
+  assert.equal(invalidGallery.status,502);assert.equal(invalidGallery.body.code,'CONVERSION_FAILED');
+  const afterInvalidGallery=(await request('/api/catalog','GET',undefined,user)).body.find((row:any)=>row.sku==='scrape-check');
+  assert.equal(afterInvalidGallery.scraped_markdown,scraped.body.scraped_markdown,'Invalid gallery IDs preserve the saved highest-quality image links');
+  assert.equal(afterInvalidGallery.revision,1);assert.deepEqual(afterInvalidGallery.scrape_metadata,scraped.body.scrape_metadata);
   await request('/api/catalog','POST',[{...sku('fallback-check'),source:{url:'https://8.8.8.8/fallback'}}],user);
   conversionUnavailable=true;
   const beforeFallbackCollection=scrapeRequests.length;
