@@ -32,7 +32,7 @@ let calls=0, providerMode='success';
 const providerRequests:any[]=[];
 const conversionRequests:any[]=[];
 const scrapeRequests:string[]=[];
-let scrapeBlocked=false, scrapePartial=false, conversionFailed=false, conversionUnavailable=false, conversionInvalidGallery=false;
+let scrapeBlocked=false, scrapePartial=false, conversionFailed=false, conversionUnavailable=false, conversionInvalidGallery=false, conversionMalformedPrimary=false;
 let duringScrape: (()=>Promise<void>) | undefined;
 const collect=async(rawUrl:string, signal:AbortSignal):Promise<CollectedPage>=>{
   const {url}=validateScrapeInput({url:rawUrl});signal.throwIfAborted();scrapeRequests.push(url);
@@ -53,6 +53,7 @@ const provider=createServer(async(req,res)=>{
     res.setHeader('Content-Type','application/json');
     if(conversionUnavailable && payload.model===DEFAULT_SETTINGS.scraperModelName){res.writeHead(500);res.end('{}');return;}
     if(conversionFailed){res.end(JSON.stringify({choices:[{finish_reason:'length',message:{content:'Incomplete conversion'}}]}));return;}
+    if(conversionMalformedPrimary && payload.model===DEFAULT_SETTINGS.scraperModelName){res.end(JSON.stringify({choices:[{finish_reason:'stop',message:{content:evidence.content}}]}));return;}
     res.end(JSON.stringify({choices:[{finish_reason:'stop',message:{content:JSON.stringify({markdown:evidence.content,
       selectedGalleryIds:conversionInvalidGallery?['unknown-gallery']:evidence.imageGalleries.map((gallery:any)=>gallery.id)})}}]}));return;
   }
@@ -251,7 +252,7 @@ try {
   const fallbackSaved=await request('/api/catalog/fallback-check/scrape','POST',{expectedRevision:0},user);
   assert.equal(fallbackSaved.status,200);assert.equal(fallbackSaved.body.revision,1);
   assert.equal(scrapeRequests.length,beforeFallbackCollection+1,'A saved fallback makes one collection');
-  assert.equal(fallbackSaved.body.scrape_metadata.modelName,DEFAULT_SETTINGS.modelName);
+  assert.equal(fallbackSaved.body.scrape_metadata.modelName,'z-ai/glm-5.3-flashx');
   conversionFailed=true;
   const fallbackFailed=await request('/api/catalog/fallback-check/scrape','POST',{expectedRevision:1},user);
   conversionUnavailable=false;conversionFailed=false;
@@ -260,6 +261,19 @@ try {
   assert.equal(fallbackPreserved.revision,1);assert.equal(fallbackPreserved.scraped_markdown,fallbackSaved.body.scraped_markdown);
   assert.deepEqual(fallbackPreserved.scrape_metadata,fallbackSaved.body.scrape_metadata,'A refused/truncated backup cannot overwrite saved evidence');
   await pool.query("DELETE FROM sku_data WHERE sku='fallback-check'");
+  await request('/api/catalog','POST',[{...sku('json-recovery-check'),source:{url:'https://8.8.8.8/json-recovery'}}],user);
+  conversionMalformedPrimary=true;
+  const beforeJsonCollection=scrapeRequests.length, beforeJsonConversion=conversionRequests.length;
+  const jsonRecovered=await request('/api/catalog/json-recovery-check/scrape','POST',{expectedRevision:0},user);
+  conversionMalformedPrimary=false;
+  assert.equal(jsonRecovered.status,200);assert.equal(jsonRecovered.body.revision,1);
+  assert.equal(scrapeRequests.length,beforeJsonCollection+1,'Invalid JSON recovery reuses the collected page');
+  assert.deepEqual(conversionRequests.slice(beforeJsonConversion).map(payload=>payload.model),[DEFAULT_SETTINGS.scraperModelName,'z-ai/glm-5.3-flashx']);
+  assert.ok(conversionRequests.slice(beforeJsonConversion).every(payload=>payload.response_format?.type==='json_object'));
+  assert.equal(jsonRecovered.body.scrape_metadata.modelName,'z-ai/glm-5.3-flashx');
+  assert.match(jsonRecovered.body.scraped_markdown,/https:\/\/cdn\.example\.com\/product\.jpg\?w=2000/);
+  assert.equal((await getProviderSettings(pool)).scraperModelName,DEFAULT_SETTINGS.scraperModelName,'Recovery does not change the saved model choice');
+  await pool.query("DELETE FROM sku_data WHERE sku='json-recovery-check'");
   scrapePartial=true;
   const partialPreview=await request('/api/scrape/preview','POST',{url:'https://8.8.8.8/product?variant=42'},user);
   assert.equal(partialPreview.status,200);assert.equal(partialPreview.body.status,'partial');

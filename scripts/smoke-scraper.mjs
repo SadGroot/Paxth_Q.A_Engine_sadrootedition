@@ -29,8 +29,13 @@ await writeFile(preload, `globalThis.fetch=async(url,init)=>{
   }
   if(String(url)!=='https://mock.scrape.example/v1/chat/completions')throw new Error('Unexpected outbound destination');
   if(new Headers(init.headers).get('Authorization')!=='Bearer mock-only')throw new Error('Model credential isolation failed');
-  const input=JSON.parse(JSON.parse(init.body).messages.find(message=>message.role==='user').content);
-  if(input.content)return Response.json({choices:[{finish_reason:'stop',message:{content:JSON.stringify({markdown:input.content,selectedGalleryIds:[]})}}]});
+  const payload=JSON.parse(init.body);
+  const input=JSON.parse(payload.messages.find(message=>message.role==='user').content);
+  if(input.content){
+    if(payload.response_format?.type!=='json_object')throw new Error('Cleanup must enable JSON mode');
+    if(input.requestedUrl.endsWith('/json-fallback') && payload.model==='z-ai/glm-5.3-flash')return Response.json({choices:[{finish_reason:'stop',message:{content:input.content}}]});
+    return Response.json({choices:[{finish_reason:'stop',message:{content:JSON.stringify({markdown:input.content,selectedGalleryIds:[]})}}]});
+  }
   await new Promise(resolve=>setTimeout(resolve,5000));
   return Response.json({choices:[{finish_reason:'stop',message:{content:JSON.stringify({qa_status:'pass',confidence:'high',summary:'Mock review of supplied evidence',issue_count:0,issues:[],source_notes:{sap_used:!!input.source_sap,url_used:!!input.scraped_markdown,source_conflicts:[]}})}}]});
 };`);
@@ -94,6 +99,11 @@ try {
   assert.equal(preview.status,'collected');assert.ok(preview.markdown.length>50);
   assert.equal(preview.requestedUrl,scrapeUrl);assert.equal(preview.finalUrl,null);assert.equal(preview.capturedAt,null);assert.ok(preview.receivedAt);
   assert.equal(preview.report.characters,preview.markdown.length);
+  const jsonFallback=(await request('/api/scrape/preview','POST',{url:'https://8.8.8.8/json-fallback'})).data;
+  assert.equal(jsonFallback.modelName,'z-ai/glm-5.3-flashx');
+  assert.match(jsonFallback.markdown,/Weight: 500 g/);
+  assert.ok(jsonFallback.markdown.endsWith('Source: <https://8.8.8.8/json-fallback>'));
+  assert.equal(jsonFallback.report.warnings.at(-1).code,'MODEL_FALLBACK');
   assert.deepEqual((await previewCounts()).rows,beforePreview,'Standalone URL retrieval writes no catalog, jobs or runs');
   await request('/api/catalog','POST',[{sku:'smoke',attribute_set:'Smoke',source:{sap:'Brand: TestBrand'},raw_row:{sku:'smoke',attributes__brand:'TestBrand'},upload_attributes:{brand:'TestBrand'},status:'ready'}]);
   const imported = await request('/api/catalog','POST',[{sku:'scrape-smoke',attribute_set:'Smoke',source:{url:scrapeUrl},raw_row:{sku:'scrape-smoke'},upload_attributes:{},status:'ready'}]);
