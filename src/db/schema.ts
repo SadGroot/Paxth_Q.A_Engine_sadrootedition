@@ -110,5 +110,6 @@ export const jobRuns = pgTable('job_runs', {
 export const jobRunItems = pgTable('job_run_items', {
   runId:text('run_id').notNull().references(()=>jobRuns.id,{onDelete:'cascade'}),sku:text('sku').notNull(),position:integer('position').notNull(),revision:integer('revision').notNull(),snapshot:jsonb('snapshot').notNull(),
   status:text('status').notNull(),attempts:integer('attempts').notNull().default(0),scrapeStarted:boolean('scrape_started').notNull().default(false),
+  selectedImageUrls:jsonb('selected_image_urls').$type<string[]>().notNull().default([]),
   startedAt:timestamp('started_at',{withTimezone:true}),finishedAt:timestamp('finished_at',{withTimezone:true}),result:jsonb('result'),error:text('error'),
 },table=>[primaryKey({columns:[table.runId,table.sku]}),check('job_run_items_status_check',sql`${table.status} IN ('queued','running','completed','failed','cancelled','skipped')`),check('job_run_items_attempts_check',sql`${table.attempts} BETWEEN 0 AND 3`)]);

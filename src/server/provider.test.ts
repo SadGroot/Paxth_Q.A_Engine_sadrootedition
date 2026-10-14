@@ -30,6 +30,45 @@ try {
   calls=0;
   await assert.rejects(completeQa({},AbortSignal.timeout(5000),{maxAttempts:2}),/HTTP 500/);
   assert.equal(calls,2,'Cleanup can reserve its third request for another model');
+  const primary = { model: 'z-ai/glm-5.3-flash', messages: [{ role: 'user', content: 'Full unchanged evidence' }], max_tokens: 10000 };
+  const backup = { ...primary, model: 'deepseek/deepseek-v4.1-flash', reasoning_effort: 'none' };
+  const routed: any[] = [], dispatched: Array<{ attempt: number; payload: unknown }> = [];
+  globalThis.fetch=async(_url,init)=>{
+    routed.push(JSON.parse(init!.body as string));
+    return routed.length < 3 ? Response.json({}, {status:500}) : Response.json({ok:true});
+  };
+  assert.deepEqual(await completeQa(primary,AbortSignal.timeout(10000),{
+    fallbackPayload:backup,beforeAttempt:async(attempt,payload)=>{dispatched.push({attempt,payload});},
+  }),{ok:true});
+  assert.deepEqual(routed,[primary,primary,backup],'Two primary failures use one backup within the three-attempt budget');
+  assert.deepEqual(dispatched.map(item=>item.attempt),[1,2,3]);
+  assert.deepEqual(dispatched[2].payload,backup,'The durable checkpoint receives the actual fallback request');
+  for (const status of [408,500,502,503,504,529]) {
+    routed.length=0;
+    globalThis.fetch=async(_url,init)=>{routed.push(JSON.parse(init!.body as string));return Response.json({ok:true});};
+    await completeQa(primary,AbortSignal.timeout(2000),{attempts:2,fallbackPayload:backup,lastFailure:{status,retryable:true}});
+    assert.deepEqual(routed,[backup],'Restart recovery dispatches only the remaining backup attempt');
+  }
+  for (const lastFailure of [undefined,{status:429,retryable:true},{status:500,retryable:false}]) {
+    routed.length=0;
+    await completeQa(primary,AbortSignal.timeout(2000),{attempts:2,fallbackPayload:backup,lastFailure});
+    assert.deepEqual(routed,[primary],'Rate limits and unclassified/permanent failures never select a backup');
+  }
+  for (const status of [400,401,403,402]) {
+    routed.length=0;
+    globalThis.fetch=async(_url,init)=>{routed.push(JSON.parse(init!.body as string));return Response.json({}, {status});};
+    await assert.rejects(completeQa(primary,AbortSignal.timeout(2000),{fallbackPayload:backup}),/HTTP/);
+    assert.deepEqual(routed,[primary],'Permanent failures stop before a fallback');
+  }
+  routed.length=0;
+  globalThis.fetch=async(_url,init)=>{routed.push(JSON.parse(init!.body as string));return Response.json({}, {status:500});};
+  await assert.rejects(completeQa(primary,AbortSignal.timeout(2000),{attempts:2,fallbackPayload:backup,lastFailure:{status:500,retryable:true}}),/HTTP 500/);
+  assert.deepEqual(routed,[backup],'An unsuccessful backup never creates a fourth attempt');
+  routed.length=0;
+  await assert.rejects(completeQa(primary,AbortSignal.timeout(2000),{
+    attempts:2,fallbackPayload:backup,lastFailure:{status:500,retryable:true},beforeAttempt:async()=>{throw new Error('checkpoint unavailable');},
+  }),/checkpoint unavailable/);
+  assert.equal(routed.length,0,'A failed fallback checkpoint prevents dispatch');
   calls=0;const attempts:number[]=[],failedAttempts:number[]=[];
   globalThis.fetch=async()=>{calls++;return calls<2?Response.json({}, {status:503}):Response.json({ok:true});};
   assert.deepEqual(await completeQa({},new AbortController().signal,{attempts:1,beforeAttempt:async n=>{attempts.push(n);},onAttemptError:async n=>{failedAttempts.push(n);}}),{ok:true});
@@ -117,6 +156,21 @@ try {
   release();await Promise.all(requests);
   assert.throws(()=>validateSettings({...editableSettings(DEFAULT_SETTINGS),apiKey:'browser-key'}),/Invalid/);
   assert.throws(()=>validateSettings({...editableSettings(DEFAULT_SETTINGS),maxTokens:Infinity}),/Invalid/);
+  for (const reasoningEffort of ['low', 'high', 'max']) {
+    assert.equal(validateSettings({ ...editableSettings(DEFAULT_SETTINGS), reasoningEffort }).reasoningEffort, reasoningEffort);
+  }
+  for (const deepseekReasoningEffort of ['auto', 'none', 'low', 'high', 'max']) {
+    assert.equal(validateSettings({ ...editableSettings(DEFAULT_SETTINGS), deepseekReasoningEffort }).deepseekReasoningEffort, deepseekReasoningEffort);
+  }
+  for (const deepseekReasoningEffort of [null, 'medium', 'LOW', '', 1, {}, []]) {
+    assert.throws(() => validateSettings({ ...editableSettings(DEFAULT_SETTINGS), deepseekReasoningEffort }), /Invalid/);
+  }
+  for (const reasoningEffort of [null, 'none', 'medium', 'LOW', '', 1, {}, []]) {
+    assert.throws(() => validateSettings({ ...editableSettings(DEFAULT_SETTINGS), reasoningEffort }), /Invalid/);
+  }
+  const { reasoningEffort: _reasoningEffort, deepseekReasoningEffort: _deepseekReasoningEffort, ...legacySettings } = editableSettings(DEFAULT_SETTINGS);
+  assert.equal(validateSettings(legacySettings).reasoningEffort, 'low', 'Older API clients can omit the new setting');
+  assert.equal(validateSettings(legacySettings).deepseekReasoningEffort, 'auto');
   for (const retired of ['scrapperModelName', 'navigationModelInitialized', 'scraperTimeout']) {
     assert.throws(() => validateSettings({ ...editableSettings(DEFAULT_SETTINGS), [retired]: 'retired' }), /Invalid/);
   }

@@ -7,6 +7,8 @@ import { populateQaWorksheet } from "../lib/qaExcelExport";
 import { hasCompletedCatalog } from "../lib/catalogGeneration";
 import { completedCatalogGroups, prepareCatalogOutputs, populateCatalogFile } from '../lib/catalogFiles';
 import { CatalogFileDownload } from './CatalogFileDownload';
+import { CatalogImagePicker } from './CatalogImagePicker';
+import { exportCatalogImages } from '../lib/catalogImageExport';
 import type { JobType, CatalogOutputs, CatalogFileGroup } from '../types';
 import { api } from "../lib/api";
 import { cn } from "../lib/utils";
@@ -20,7 +22,7 @@ type Run = {
   catalogGroups?: Pick<CatalogFileGroup, 'attributeSet' | 'headers'>[];
   catalogOutputs?: CatalogOutputs;
   createdAt: string; finishedAt?: string; error?: string;
-  items?: Array<{ sku: string; status: string; attempts: number; error?: string; snapshot: SkuData; result?: SkuData }>;
+  items?: Array<{ sku: string; status: string; attempts: number; error?: string; snapshot: SkuData; result?: SkuData; selectedImageUrls?: string[] }>;
 };
 const active = (run: Run) => ["queued", "running", "cancelling"].includes(run.status);
 const hasHistory = (runs: Run[] = []) => runs.some(run => ["completed", "failed", "cancelled"].includes(run.status));
@@ -59,6 +61,8 @@ export function JobsModule({ initialJobId }: { initialJobId?: string }) {
   const [preparedFiles, setPreparedFiles] = useState<CatalogOutputs | null>(null);
   const [filesError, setFilesError] = useState('');
   const [combinedFiles, setCombinedFiles] = useState<CatalogFileGroup[] | null>(null);
+  const [imagePicker, setImagePicker] = useState<{ runId: string; sku: SkuData; selectedImageUrls: string[] } | null>(null);
+  const [imageExport, setImageExport] = useState<{ done: number; total: number } | null>(null);
   const latest = useRef({ refreshData, jobs });
   latest.current = { refreshData, jobs };
   const jobIds = jobs.map(job => job.id).join("\n");
@@ -68,6 +72,7 @@ export function JobsModule({ initialJobId }: { initialJobId?: string }) {
     setSelectedJobs(new Set()); setSelectedJobToView(jobs.find(job => job.id === initialJobId) || null); setSelectedRunId(''); setExpandedSku(null);
     setActiveRuns([]); setCatalogRuns({}); setPollError('');
     setPreparedFiles(null); setCombinedFiles(null); setFilesError('');
+    setImagePicker(null);
   }, [workspaceMode, initialJobId]);
 
   useEffect(() => {
@@ -291,6 +296,19 @@ export function JobsModule({ initialJobId }: { initialJobId?: string }) {
       return;
     }
     void exportJobExcel(completedJobs);
+  };
+
+  const exportImages = async () => {
+    if (!selectedRunId || !selectedJobToView || imageExport) return;
+    setImageExport({ done: 0, total: 0 });
+    try {
+      const run = await request<Run>(`/api/job-runs/${encodeURIComponent(selectedRunId)}`);
+      if (active(run)) throw new Error('Wait for the Catalog run to finish before exporting images.');
+      const blob = await exportCatalogImages(run.id, run.items || [], (done, total) => setImageExport({ done, total }));
+      saveAs(blob, selectedJobToView.name.replace(/[^a-zA-Z0-9_-]/g, '_') + '_Images.zip');
+      addNotification({ type: 'success', title: 'Images Exported', message: 'Downloaded all selected images from this run as 1500 × 1500 JPG files.' });
+    } catch (error) { addNotification({ type: 'error', title: 'Image Export Failed', message: error instanceof Error ? error.message : 'Could not export images.' }); }
+    finally { setImageExport(null); }
   };
 
   const getJobSkusList = (job: Job) => {
@@ -550,6 +568,11 @@ export function JobsModule({ initialJobId }: { initialJobId?: string }) {
               </div>
 
               <div className="flex items-center gap-3">
+                {isCatalog && <button onClick={exportImages}
+                  disabled={!viewRun || viewRun.id !== selectedRunId || active(viewRun) || Boolean(imageExport) || !viewRun.items?.some(item => item.selectedImageUrls?.length)}
+                  className="flex items-center gap-2 px-4 py-2 text-xs text-white bg-emerald-700 rounded-sm disabled:opacity-50">
+                  <Download className="w-4 h-4" />{imageExport ? `Preparing Images ${imageExport.done}/${imageExport.total}…` : 'Export Images (.zip)'}
+                </button>}
                 {isCatalog && <button onClick={() => runJob(selectedJobToView.id, false, undefined, true)}
                   disabled={submitting || activeRuns.some(run => run.jobId === selectedJobToView.id)}
                   className="flex items-center gap-2 px-4 py-2 text-xs text-white bg-[#1A1A1A] rounded-sm disabled:opacity-50">
@@ -574,6 +597,7 @@ export function JobsModule({ initialJobId }: { initialJobId?: string }) {
 
             {/* Content Body */}
             <div className="flex-1 overflow-y-auto p-6 space-y-4">
+              {imageExport && <p role="status" className="text-sm">Preparing selected images: {imageExport.done} of {imageExport.total}. Keep this tab open until the ZIP downloads.</p>}
               {Boolean(histories[selectedJobToView.id]?.length) && <label className="block text-sm">
                 Run history
                 <select className="ml-3 border rounded p-2" value={selectedRunId} onChange={event => setSelectedRunId(event.target.value)}>
@@ -633,12 +657,21 @@ export function JobsModule({ initialJobId }: { initialJobId?: string }) {
                         SKU: {sku.sku} · {state?.status || sku.status} · Warnings: {state?.warnings.length || 0}
                       </button>
                       {state?.tokensUsed && <span className="text-xs text-purple-700">Tokens: {state.tokensUsed.total_tokens.toLocaleString()}</span>}
+                      <button onClick={() => {
+                        if (viewRun?.id === selectedRunId) setImagePicker({ runId: viewRun.id, sku,
+                          selectedImageUrls: viewRun.items?.find(item => item.sku === sku.sku)?.selectedImageUrls || [] });
+                      }} disabled={!viewRun || viewRun.id !== selectedRunId || active(viewRun) || Boolean(imageExport)}
+                        title={!selectedRunId ? 'Choose a saved run to select images' : viewRun && active(viewRun) ? 'Available when this run finishes' : 'Select images from this SKU markdown'}
+                        className="px-3 py-1.5 text-xs border rounded-sm disabled:opacity-50">
+                        Images ({viewRun?.items?.find(item => item.sku === sku.sku)?.selectedImageUrls?.length || 0})
+                      </button>
                       <button onClick={() => runJob(selectedJobToView.id, false, sku.sku)}
                         disabled={submitting || activeRuns.some(run => run.jobId === selectedJobToView.id)}
                         className="px-3 py-1.5 text-xs border rounded-sm disabled:opacity-50">Rerun Catalog</button>
                     </div>
                     {(state?.error || sku.error) && <p role="alert" className="p-4 text-red-700">{state?.error || sku.error}</p>}
                     {isExpanded && <div className="p-4 space-y-3 overflow-x-auto">
+                      {state?.modelName && <p className="text-xs">Model: {state.modelName}</p>}
                       {state?.warnings.length ? <ul className="list-disc pl-5 text-xs text-amber-800">
                         {state.warnings.map((warning, index) => <li key={index}>{warning}</li>)}
                       </ul> : null}
@@ -806,6 +839,11 @@ export function JobsModule({ initialJobId }: { initialJobId?: string }) {
           </div>
         </div>
       )}
+      {isCatalog && imagePicker && <CatalogImagePicker key={`${imagePicker.runId}:${imagePicker.sku.sku}`} {...imagePicker}
+        onClose={() => setImagePicker(null)} onSaved={urls => {
+          setViewRun(previous => previous?.id === imagePicker.runId ? { ...previous,
+            items: previous.items?.map(item => item.sku === imagePicker.sku.sku ? { ...item, selectedImageUrls: urls } : item) } : previous);
+        }} />}
     </div>
   );
 }

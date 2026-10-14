@@ -12,6 +12,7 @@ import { initializeProvider, registerProviderRoutes, getProviderSettings } from 
 import { collectProductPage } from "./src/server/scrapePipeline.js";
 import { initializeJobRuns, registerJobRunRoutes, startJobWorker } from "./src/server/jobRunner.js";
 import { registerScrapeRoutes } from "./src/server/scraper.js";
+import { registerJobImageRoutes } from "./src/server/jobImages.js";
 
 async function startServer() {
   if (!pool || !db) throw new Error("DATABASE_URL is required");
@@ -40,6 +41,7 @@ async function startServer() {
   registerScrapeRoutes(app, async (url, signal) => collectProductPage(url, signal, await getProviderSettings(pool)));
   registerProviderRoutes(app,pool);
   registerJobRunRoutes(app,pool);
+  registerJobImageRoutes(app,pool);
   app.use('/api', (_req,res) => { res.status(404).json({error:'Endpoint not found'}); });
   app.use((error: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
     const known = error instanceof ApiError || error instanceof ProviderError;

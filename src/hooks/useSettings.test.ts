@@ -13,6 +13,22 @@ assert.equal(settings.maxConcurrency,1);
 assert.equal(settings.maxRetries,2);
 assert.equal(settings.maxTokens,10000);
 assert.equal(settings.scraperModelName, 'z-ai/glm-5.3-flash');
+assert.equal(settings.reasoningEffort, 'low', 'Saved settings without a reasoning level default to low');
+assert.equal(settings.deepseekReasoningEffort, 'auto', 'Older settings preserve automatic DeepSeek defaults');
+for (const deepseekReasoningEffort of ['auto', 'none', 'low', 'high', 'max'] as const) {
+  assert.equal(normalizeSettings({ deepseekReasoningEffort }).deepseekReasoningEffort, deepseekReasoningEffort);
+  assert.equal(editableSettings(normalizeSettings({ deepseekReasoningEffort })).deepseekReasoningEffort, deepseekReasoningEffort);
+}
+for (const deepseekReasoningEffort of [null, 'medium', 'LOW', '', 1, {}, []]) {
+  assert.equal(normalizeSettings({ deepseekReasoningEffort } as any).deepseekReasoningEffort, 'auto');
+}
+for (const reasoningEffort of ['low', 'high', 'max'] as const) {
+  assert.equal(normalizeSettings({ reasoningEffort }).reasoningEffort, reasoningEffort);
+  assert.equal(editableSettings(normalizeSettings({ reasoningEffort })).reasoningEffort, reasoningEffort);
+}
+for (const reasoningEffort of [null, 'none', 'medium', 'LOW', '', 1, {}, []]) {
+  assert.equal(normalizeSettings({ reasoningEffort } as any).reasoningEffort, 'low');
+}
 assert.equal(normalizeSettings({scraperModelName:' custom/scrape ',modelName:'qa'}).scraperModelName, 'custom/scrape');
 assert.equal(normalizeSettings({scraperModelName:' '}).scraperModelName, DEFAULT_SETTINGS.scraperModelName);
 assert.equal(editableSettings(normalizeSettings({scraperModelName:'saved/scrape'})).scraperModelName, 'saved/scrape');

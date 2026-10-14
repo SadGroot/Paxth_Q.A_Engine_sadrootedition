@@ -40,6 +40,8 @@ export function validateSettings(value: any) {
   if (!value || typeof value !== 'object' || Array.isArray(value) || Object.keys(value).some(key => !Object.keys(editableSettings(DEFAULT_SETTINGS)).includes(key)) ||
     typeof value.modelName !== 'string' || !value.modelName.trim() || value.modelName.length > 256 ||
     (value.scraperModelName !== undefined && (typeof value.scraperModelName !== 'string' || !value.scraperModelName.trim() || value.scraperModelName.length > 256)) ||
+    (value.reasoningEffort !== undefined && !['low', 'high', 'max'].includes(value.reasoningEffort)) ||
+    (value.deepseekReasoningEffort !== undefined && !['auto', 'none', 'low', 'high', 'max'].includes(value.deepseekReasoningEffort)) ||
     typeof value.temperature !== 'number' || !Number.isFinite(value.temperature) || value.temperature < 0 || value.temperature > 1 ||
     !Number.isSafeInteger(value.maxTokens) || value.maxTokens < 1 || value.maxTokens > 65536 ||
     !Number.isSafeInteger(value.maxPageContentLength) || value.maxPageContentLength < 1 || value.maxPageContentLength > 200000 ||
@@ -49,8 +51,9 @@ export function validateSettings(value: any) {
 export async function completeQa(payload: unknown, signal: AbortSignal, options: {
   taskLabel?: 'QA' | 'Catalog' | 'Scraping';
   maxAttempts?: 1 | 2 | 3;
-  attempts?: number; beforeAttempt?: (attempt: number) => Promise<void>;
+  attempts?: number; beforeAttempt?: (attempt: number, payload: unknown) => Promise<void>;
   lastError?: string | null; onAttemptError?: (attempt: number, error: ProviderError) => Promise<void>;
+  fallbackPayload?: unknown; lastFailure?: { status: number; retryable: boolean };
 } = {}) {
   const label = options.taskLabel || 'QA';
   const maxAttempts = options.maxAttempts ?? 3;
@@ -60,15 +63,21 @@ export async function completeQa(payload: unknown, signal: AbortSignal, options:
   signal.throwIfAborted();
   if ((options.attempts ?? 0) >= 3) throw new ProviderError(exhaustedMessage);
   const { baseUrl, apiKey } = getProviderCredentials();
+  let lastFailure = options.lastFailure;
   for (let attempt = (options.attempts ?? 0) + 1; attempt <= maxAttempts; attempt++) {
     signal.throwIfAborted();
+    const request = attempt === 3 && options.fallbackPayload && lastFailure?.retryable &&
+      [408, 500, 502, 503, 504, 529].includes(lastFailure.status) ? options.fallbackPayload : payload;
     try {
-      const response = await fetchChatCompletion(baseUrl, apiKey, payload, signal, () => options.beforeAttempt?.(attempt) ?? Promise.resolve(), 120_000);
+      const response = await fetchChatCompletion(baseUrl, apiKey, request, signal, () => options.beforeAttempt?.(attempt, request) ?? Promise.resolve(), 120_000);
       if (!response.ok) throw await providerResponseError(response, apiKey);
       try { return await response.json(); } catch { throw new ProviderError('Model returned invalid JSON'); }
     } catch (error) {
       signal.throwIfAborted();
-      if (error instanceof ProviderError) await options.onAttemptError?.(attempt, error);
+      if (error instanceof ProviderError) {
+        lastFailure = { status: error.status, retryable: error.retryable };
+        await options.onAttemptError?.(attempt, error);
+      }
       signal.throwIfAborted();
       if (!(error instanceof ProviderError) || !error.retryable || attempt === maxAttempts) throw error;
       if (error.retryAfterMs > 300000) throw new ProviderError('Provider requested a retry beyond the job deadline', 429);

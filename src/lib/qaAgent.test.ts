@@ -43,10 +43,37 @@ assert.deepEqual(request, {
 });
 assert.equal(normalizeSettings().modelName, "deepseek/deepseek-v4.1-flash");
 const { reasoning_effort, ...payloadWithoutReasoning } = request.payload;
-for (const model of ["z-ai/glm-5.3-flash", "deepseek/deepseek-v4-flash", "deepseek/deepseek-v4.1-flash-extra"]) {
+for (const model of ["deepseek/deepseek-v4-flash", "deepseek/deepseek-v4.1-flash-extra"]) {
   assert.deepEqual(buildQaRequest({ ...requestSettings, modelName: model }, input), {
     payload: { ...payloadWithoutReasoning, model },
-  }, "Only the exact supported QA model receives a reasoning control");
+  }, "Unrecognized QA models receive no model-specific reasoning control");
+}
+assert.deepEqual(buildQaRequest(requestSettings, input, 'catalog').payload, {
+  ...request.payload, reasoning_effort: 'none',
+}, 'DeepSeek Catalog retains its existing non-thinking request');
+for (const deepseekReasoningEffort of ['none', 'low', 'high', 'max'] as const) {
+  for (const mode of ['qa', 'catalog'] as const) {
+    assert.deepEqual(buildQaRequest({ ...requestSettings, deepseekReasoningEffort }, input, mode).payload, {
+      ...request.payload, reasoning_effort: deepseekReasoningEffort,
+    }, 'Explicit DeepSeek levels apply to both workflows');
+  }
+}
+for (const modelName of ['z-ai/glm-5.3-flash', 'z-ai/glm-5.3-flashx']) {
+  assert.deepEqual(buildQaRequest({ ...requestSettings, modelName: ` ${modelName} ` }, input, 'catalog').payload, {
+    ...request.payload, model: modelName, reasoning_effort: 'low',
+  }, 'GLM Catalog bounds reasoning while preserving the saved limits, JSON mode, and messages');
+  for (const mode of ['qa', 'catalog'] as const) {
+    for (const reasoningEffort of ['low', 'high', 'max'] as const) {
+      assert.deepEqual(buildQaRequest({ ...requestSettings, modelName, reasoningEffort }, input, mode).payload, {
+        ...request.payload, model: modelName, reasoning_effort: reasoningEffort,
+      }, 'Both GLM workflows use the selected reasoning level without changing other request fields');
+    }
+  }
+}
+for (const modelName of ['custom/catalog', 'z-ai/glm-5.3-flash-extra', 'deepseek/deepseek-v4.1-flash-extra']) {
+  assert.deepEqual(buildQaRequest({ ...requestSettings, modelName }, input, 'catalog').payload, {
+    ...payloadWithoutReasoning, model: modelName,
+  }, 'Other Catalog models receive no model-specific reasoning control');
 }
 assert.equal(buildQaRequest({ ...requestSettings, maxTokens: 0 }, input).payload.max_tokens, 4096);
 const data = JSON.parse(input.messages[1].content);

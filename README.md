@@ -127,7 +127,7 @@ AICREDITS_API_KEY=your-private-aicredits-key
 
 With neither LLM override set, the server uses `https://aicredits.in/v1`. This same-provider HTTPS route is reachable from this Codespace; the documented `api.aicredits.in` subdomain timed out during verification. QA and Markdown conversion use the same server-only key; Crawl4AI receives only its own key.
 
-On 9 October 2026, both live connectivity tests passed through the running Codespaces app: `deepseek/deepseek-v4.1-flash` for Q&A and `z-ai/glm-5.3-flash` for scraping. These checks verify model connectivity, not retailer extraction or review accuracy.
+                                                                                                                                                                                                                                                                                                              y.
 
 To use an explicit OpenAI-compatible provider, set both `LLM_BASE_URL` and `LLM_API_KEY`. A partial override fails rather than using the AI Credits key with another destination. The server appends `/chat/completions` unless the URL already ends with it. The provider must accept the selected model and chat-completion payload, including JSON output mode.
 
@@ -193,18 +193,21 @@ Production cookies are Secure, so a production browser session needs HTTPS. An H
 
 ### Shared model settings
 
-Admins edit these in **LLM Settings**. They persist in PostgreSQL and apply to new runs. Catalog generation shares the model, temperature, token limit, and evidence limit; QA instructions apply only to QA.
+Admins edit these in **LLM Settings**. They persist in PostgreSQL and apply to new runs. Catalog generation shares the model, temperature, token limit, evidence limit, and global instructions with QA. Reasoning selections apply to both workflows, with model-specific automatic defaults.
 
 | Setting | Fresh-install default | Accepted range/behavior |
 | --- | --- | --- |
 | QA model | `deepseek/deepseek-v4.1-flash` | Provider identifier; availability depends on the gateway |
 | Scraping / Markdown model | `z-ai/glm-5.3-flash` | Independent formatter model using the same server credentials |
+| Reasoning level | GLM: `low`; DeepSeek: `auto` | GLM: Low, High, Max. DeepSeek: Auto, Off, Low, High, Max |
 | Temperature | `0.1` | `0`–`1` |
 | Maximum output tokens | `4096` | Integer `1`–`65536`; the model/provider can impose a lower limit |
 | Maximum evidence characters | `40000` | Integer `1`–`200000`; limits web Markdown, not the entire prompt |
 | Shared QA / Catalog instructions | Built-in catalog review instructions | Global; blank text uses the default |
 
-The exact default model receives `reasoning_effort: "low"`. Existing saved settings can differ. Compatibility concurrency/retry fields do not increase worker concurrency.
+The reasoning dropdown supports `z-ai/glm-5.3-flash`, `z-ai/glm-5.3-flashx`, and `deepseek/deepseek-v4.1-flash`. GLM retains its saved Low/High/Max choice. DeepSeek saves a separate `deepseekReasoningEffort` choice so switching models preserves each preference and old snapshots retain their behavior. Auto uses Low for QA and Off (`none`) for Catalog; explicit DeepSeek levels apply to both workflows. Older settings without these fields use GLM Low and DeepSeek Auto. High and Max can take longer and reproduce provider time-limit failures on large catalog requests. For other models, the dropdown is disabled and no reasoning parameter is sent; the provider controls its default. Markdown cleanup keeps its fixed low effort. Compatibility concurrency/retry fields do not increase worker concurrency.
+
+To switch the shared QA/Catalog model through AI Credits, enter `deepseek/deepseek-v4.1-flash` in **Q&A model**, choose **Auto**, and save. This is V4.1 Flash, not a `v4.11` identifier. New runs use the saved model; admitted runs keep their configuration.
 
 **Test Q&A API** and **Test Markdown model** send a short prompt to their displayed model, including unsaved edits. They do not save settings, retrieve a page, or validate a complete task answer. They use the same server key and can incur provider cost. The remaining limits and QA instructions apply to mapping; Markdown conversion has fixed instructions and a 16,384-token ceiling.
 
@@ -239,9 +242,17 @@ Use the **QA / Catalog** toggle beside Notifications. A fresh page load defaults
 4. Successful creation opens the parent job in **Jobs**. **Category Subjobs & Files** shows one subjob/template per attribute set, category progress/failures, and exactly one shared shipping workbook. Download prepared files immediately; choose **Run All Categories** to run the parent, or **Run Catalog** on its card to process unfinished rows. SKU, base code, EAN, shipping weight, brand, and product type pass through unchanged, including blank cells. Other empty cells are generated using SAP/page evidence and explicit defaults from the global instructions and category mapping. SAP takes factual precedence; mapping examples are formatting guidance, not product facts. Each run snapshots the shared global instructions, category rules, and fixed headers; later edits do not change an active or historical run.
 5. Inspect generated cells and warnings in **View Results**, then download each set's final `.xlsx` upload file. Uploaded values that conflict with evidence or mapping requirements stay unchanged. Affected cells are highlighted in Jobs and Excel; Excel comments explain the source conflict, missing fact, or mapping requirement. Unknown facts remain blank with cell warnings; malformed or incomplete model responses fail that SKU. All catalog exports preserve these comments, including combined exports after SKU deduplication. Final uploads include only validated rows, report omitted unfinished/failed SKUs per set, and contain exactly the mapped columns without QA or warning columns. Shipping always contains every assigned SKU. Run history selects that run's saved files and schemas; **Current prepared files** shows the most recent prepared snapshot.
 
+After a Catalog run finishes, open **View Results** and click **Images** beside a SKU. The picker uses image URLs in that run's saved Markdown, including its **Product images** gallery. Click images in the desired filename order, then **Save selections**. Deselecting closes gaps; selecting again appends the image. Choices are shared and saved per run, including after reopening the app. New runs start with a fresh selection. **Export Images (.zip)** downloads all saved selections across that run's SKUs as `SKU-1.jpg`, `SKU-2.jpg`, and so on.
+
+Previews and downloads use the same 1500 × 1500 white canvas. White/transparent outer margins are trimmed, then the visible content is centered inside a 1200 × 1200 area with at least 150 px padding, preserving proportions. Transparent pixels become white; colored backgrounds remain. This does not perform background removal. The server retrieves only public HTTP(S) raster images from the saved Markdown, checks redirects, and limits each source to 20 MiB. A failed source stops export with an error, preserving the saved choices; no partial ZIP downloads. Keep the tab open during export. Very large jobs can require substantial browser memory.
+
 Catalog generation requires JSON with `row`, general `warnings`, and `cellWarnings: [{ header, message }]`; each cell warning must use an exact output header. These server-validated findings persist with the result. Historical results without cell warnings remain readable/exportable, but the next unfinished run regenerates them once to produce cell findings. Model validation checks structure, not factual correctness; review representative evidence and flagged values before upload.
 
-For `deepseek/deepseek-v4.1-flash`, Catalog uses `reasoning_effort: "none"` to disable thinking: live catalog requests with thinking repeatedly returned HTTP 500 after about 30 seconds, while the same request without thinking completed in about seven seconds. [DeepSeek documents this non-thinking option](https://api-docs.deepseek.com/api/create-chat-completion/). Q&A keeps its existing low reasoning effort; other models, saved settings, token limits, JSON validation, and bounded retries stay unchanged.
+For `deepseek/deepseek-v4.1-flash`, Auto uses `reasoning_effort: "none"` for Catalog: live catalog requests with thinking repeatedly returned HTTP 500 after about 30 seconds, while the same request without thinking completed in about seven seconds. [DeepSeek documents reasoning levels and the non-thinking option](https://api-docs.deepseek.com/api/create-chat-completion/).
+
+For `z-ai/glm-5.3-flash` and `z-ai/glm-5.3-flashx`, QA and Catalog use the saved reasoning level, defaulting to `low`. GLM defaults to maximum reasoning when no level is supplied and does not support disabling thinking ([Z.ai documentation](https://docs.z.ai/guides/capabilities/thinking)). On 12 October 2026, replaying an actual failed GLM catalog request reproduced HTTP 500 after 30 seconds; changing only reasoning effort to low returned a validated 61-column catalog row in 16 seconds. The connectivity test uses a tiny prompt and cannot verify full Catalog processing. Model choice, token limits, JSON validation, and bounded retries stay unchanged.
+
+Low effort does not prevent every GLM gateway failure. Two remaining HONOR rows repeatedly failed after about 30 seconds even with Low effort; the exact inputs produced validated 61-column rows through DeepSeek with thinking Off in 15 and 12 seconds. Catalog therefore makes at most two attempts with a selected GLM Flash/FlashX, then uses DeepSeek with Off for its final attempt after transient network, 408, or selected 5xx failures. All three attempts share the existing five-minute SKU deadline and reuse the same evidence, rules, and output schema. Authentication, configuration, credits, and rate limits do not switch models; refused, truncated, or invalid successful output still fails validation. The actual requested model and transient failure status are checkpointed for restart recovery; results show the actual model and a fallback notice. Successful rows are preserved by **Resume Catalog**. QA and Markdown cleanup retain their own retry policies. Startup adds the nullable `job_run_items.provider_state` column automatically.
 
 Catalog imports retain displayed Excel text and CSV identifiers, including leading zeroes and the exact capitalization of attribute names. Keep identifiers as text in source files: formatting or precision already lost in a numeric spreadsheet cell cannot be reconstructed.
 
@@ -578,6 +589,8 @@ Except `/healthz` and login, these routes require an application session. Login 
 | `/api/jobs/:id/runs` | GET, POST | History; queue `{ requestId, mode, sku? }` |
 | `/api/job-runs/:id` | GET | Metadata and all item snapshots/results |
 | `/api/job-runs/:id/cancel` | POST | Creator/admin cancellation |
+| `/api/job-runs/:id/items/:sku/images` | PUT | Save ordered `{ selectedImageUrls, expectedSelectedImageUrls }` from a finished Catalog run; stale choices return 409 |
+| `/api/job-runs/:id/items/:sku/images/:index` | GET | Download a public raster image present in that run SKU's Markdown |
 | `/api/qa-configuration` | GET | Consistent snapshot of memory/rules and attribute-set `catalogHeaders` |
 | `/api/qa-agent-memory` | PUT | Admin `{ qaAgentMemory }` |
 | `/api/attribute-sets` | POST | Admin `{ name, rulesMarkdown, catalogHeaders? }`; omitted headers default to `[]` |
@@ -658,6 +671,8 @@ The historically named browser script also checks QA settings, SKU-connected Mar
 | `npm run test:catalog` | Import trust boundary and canonical result/history projections |
 | `npm run test:catalog-generation` | Catalog headers, copied cells, model validation, independent results, regional shipping, grouping, and exact workbook exports |
 | `npm run test:catalog-browser` | QA/Catalog switch, text-preserving CSV/XLSX imports, job controls, warnings, and upload exports |
+| `npm run test:catalog-images` | Markdown images, padding, filenames, saved order, conflicts, safe retrieval and source limits |
+| `npm run test:catalog-images-browser` | Image picker, saved selections, all-SKU ZIP, actual pixel dimensions, padding and failures |
 | `npm run test:job-state` | Job state and Excel feedback |
 | `npm run test:job-runner` | Transaction retries/rollback |
 | `npm run test:llm-response` | Parsing/output budgets |

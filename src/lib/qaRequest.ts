@@ -4,14 +4,17 @@ import { extractLLMResponseContent, parseLLMJsonResponse } from "./llmResponse";
 
 type QaInput = ReturnType<typeof prepareQaInput>;
 
-export function buildQaRequest(settings: AppSettings, input: Pick<QaInput, 'messages'>) {
+export function buildQaRequest(settings: AppSettings, input: Pick<QaInput, 'messages'>, mode: 'qa' | 'catalog' = 'qa') {
   const normalized = normalizeSettings(settings);
   return {
     payload: {
       model: normalized.modelName,
       temperature: Number(normalized.temperature),
       max_tokens: normalized.maxTokens,
-      ...(normalized.modelName === "deepseek/deepseek-v4.1-flash" && { reasoning_effort: "low" }),
+      ...(normalized.modelName === "deepseek/deepseek-v4.1-flash" && { reasoning_effort: normalized.deepseekReasoningEffort === 'auto'
+        ? mode === 'catalog' ? 'none' : 'low' : normalized.deepseekReasoningEffort }),
+      // GLM defaults to maximum reasoning, which caused 30-second gateway failures on catalog requests.
+      ...(["z-ai/glm-5.3-flash", "z-ai/glm-5.3-flashx"].includes(normalized.modelName) && { reasoning_effort: normalized.reasoningEffort }),
       response_format: { type: "json_object" },
       messages: input.messages,
     },

@@ -9,6 +9,7 @@ export interface CatalogState {
   status: 'completed' | 'failed';
   revision: number;
   jobId: string;
+  modelName?: string;
   headers: string[];
   row?: Record<string, string>;
   warnings: string[];

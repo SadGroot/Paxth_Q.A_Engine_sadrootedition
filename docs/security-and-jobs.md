@@ -52,6 +52,8 @@ QA, Markdown cleanup and connectivity checks share two active model requests and
 
 ## Upgrade and verify
 
+Catalog requests using GLM Flash/FlashX can use DeepSeek with thinking Off for the third and final attempt after temporary network/408/5xx failures. Primary and backup share the same credentials, complete input, validation, durable attempt count, and five-minute deadline. Rate limits and permanent failures do not switch models. Startup adds nullable `job_run_items.provider_state` to retain the requested model and last failure classification across restarts. Completed Catalog results record the actual model and a fallback notice. DeepSeek's Auto reasoning setting keeps Off for Catalog and Low for QA; explicit levels are saved separately from GLM's choice, preserving old snapshots and model-switch preferences.
+
 The cloud integration requires no database schema migration. Configure `CRAWL4AI_API_KEY` and model credentials, then release server/client assets together and reload clients. Saved settings, browser/manual/legacy evidence, retired columns, and historical run snapshots remain readable. `scraperConfigured` is a read-only key-presence boolean, not a successful connectivity check. Verify anonymous/wrong-origin rejection, temporary previews, cancellation, and failed cleanup with prior evidence preserved. Local Python, Chromium retrieval, and proxy installation have been removed; UI browser tests still use Playwright.
 
 1. Keep a verified backup outside the repository and retain the prior image. Test these migrations on a restored copy before production.

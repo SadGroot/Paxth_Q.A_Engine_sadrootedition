@@ -13,6 +13,7 @@ import {initializeProvider,registerProviderRoutes,getProviderSettings} from './p
 import {initializeJobRuns,registerJobRunRoutes,startJobWorker} from './jobRunner';
 import {ApiError,registerCatalogRoutes} from './catalog';
 import {registerScrapeRoutes} from './scraper';
+import {registerJobImageRoutes} from './jobImages';
 import {collectProductPage,scrapeProductPage} from './scrapePipeline';
 import type {AppSettings} from '../lib/providerSettings';
 import {ProviderError} from '../lib/chatCompletion';
@@ -69,9 +70,12 @@ const provider=createServer(async(req,res)=>{
   let catalogInput:any;
   try { catalogInput = JSON.parse(payload.messages.find((message:any)=>message.role==='user').content); } catch { /* Connectivity tests send plain text. */ }
   if (catalogInput?.template) {
+    if (['catalog-glm-outage', 'catalog-invalid-backup'].includes(providerMode) && payload.model.startsWith('z-ai/')) {
+      res.writeHead(500);res.end('{}');return;
+    }
     const row = { ...catalogInput.template, name: 'TestBrand USB Hub', attributes__fallback: 'No',
       ...Object.fromEntries(CATALOG_PASS_THROUGH_HEADERS.map(header=>[header,'MODEL MUST NOT CHANGE THIS'])) };
-    const result = providerMode === 'catalog-mixed' && ['cat-b','multi-b'].includes(catalogInput.sku)
+    const result = providerMode === 'catalog-invalid-backup' || providerMode === 'catalog-mixed' && ['cat-b','multi-b'].includes(catalogInput.sku)
       ? { row: { sku: catalogInput.sku }, warnings: [], cellWarnings: [] } : { row, warnings: [], cellWarnings: [{ header: 'name', message: 'Review the generated name against SAP product identity.' }] };
     res.end(JSON.stringify({choices:[{finish_reason:'stop',message:{content:JSON.stringify(result)}}],usage:{prompt_tokens:10,completion_tokens:5,total_tokens:15}}));return;
   }
@@ -98,7 +102,7 @@ try {
   server.on('request',app);await listen(server);
   const origin=`http://127.0.0.1:${(server.address() as any).port}`;process.env.APP_ORIGIN=origin;
   registerAuth(app,pool);registerCatalogRoutes(app,pool,scrape);registerProviderRoutes(app,pool);registerScrapeRoutes(app,async(url,signal)=>collectProductPage(url,signal,await getProviderSettings(pool),collect));
-  registerJobRunRoutes(app,pool);registerQaConfigurationRoutes(app,drizzle(pool,{schema}));
+  registerJobRunRoutes(app,pool);registerJobImageRoutes(app,pool);registerQaConfigurationRoutes(app,drizzle(pool,{schema}));
   app.use('/api', (_req,res)=>res.status(404).json({error:'Not found'}));
   app.use((err:any,_req:any,res:any,_next:any)=>res.status(err instanceof ApiError||err instanceof ProviderError?err.status:err.code==='23505'?409:503).json({error:err.message}));
   const password='test-only-strong-password';
@@ -109,6 +113,7 @@ try {
     return {status:response.status,body:await response.json(),cookie:response.headers.get('set-cookie')};
   };
   assert.equal((await request('/api/catalog')).status,401);
+  assert.equal((await request('/api/job-runs/missing/items/sku/images/0')).status,401);
   assert.equal((await request('/api/catalog','GET',undefined,'paxth_qa_user_session={"role":"admin"}')).status,401);
   assert.equal((await request('/api/auth/login','POST',{username:'Administrator',password},'','https://evil.example')).status,403);
   const adminLogin=await request('/api/auth/login','POST',{username:'administrator',password});assert.equal(adminLogin.status,200);
@@ -617,6 +622,23 @@ try {
   await waitFor(async()=>(await catalogRun(firstCatalog.body.id)).status==='completed','catalog generation');
   await stopWorker();stopWorker=undefined;
   const generatedCatalog=await catalogRun(firstCatalog.body.id);
+  const imageEvidence={...generatedCatalog.items[0].result,scraped_markdown:'## Product images\n- <https://cdn.example.com/first.jpg>\n- <https://cdn.example.com/second.jpg>',
+    scrape_metadata:{method:'manual',requestedUrl:null,finalUrl:null,capturedAt:null}};
+  await pool.query("INSERT INTO jobs(id,name,created_at,job_type,skus) VALUES('catalog-image-fixture','Images',$1,'catalog','[\"image-sku\"]')",[new Date().toISOString()]);
+  await pool.query(`INSERT INTO job_runs(id,job_id,request_id,actor_id,actor_name,mode,status,configuration)
+    VALUES('image-fixture-run','catalog-image-fixture','image-test','user','Operator','all','completed',$1)`,
+    [JSON.stringify({jobType:'catalog',catalogOutputs:{groups:[],shipping:null}})]);
+  await pool.query(`INSERT INTO job_run_items(run_id,sku,position,revision,snapshot,status,result)
+    VALUES('image-fixture-run','image-sku',0,0,$1,'completed',$1)`,[JSON.stringify(imageEvidence)]);
+  const imageEndpoint='/api/job-runs/image-fixture-run/items/image-sku/images';
+  const selection={selectedImageUrls:['https://cdn.example.com/second.jpg','https://cdn.example.com/first.jpg'],expectedSelectedImageUrls:[]};
+  assert.equal((await request(imageEndpoint,'PUT',selection)).status,401);
+  assert.equal((await request(imageEndpoint,'PUT',selection,user,'https://evil.example')).status,403);
+  assert.equal((await request(imageEndpoint,'PUT',selection,user)).status,200,'Operators can save image order');
+  assert.deepEqual((await catalogRun('image-fixture-run')).items[0].selectedImageUrls,selection.selectedImageUrls);
+  assert.equal((await request(imageEndpoint,'PUT',{...selection,selectedImageUrls:[]},other)).status,409,'Shared workspace edits cannot overwrite stale image selections');
+  assert.equal((await request(imageEndpoint,'PUT',{...selection,selectedImageUrls:['https://evil.example/image.jpg']},user)).status,400);
+  assert.equal((await request('/api/jobs/catalog-image-fixture','DELETE',undefined,admin)).status,200);
   assert.deepEqual(generatedCatalog.catalogHeaders,catalogHeaders,'Header edits do not change admitted runs');
   assert.ok(providerRequests[catalogOffset].messages[0].content.includes(catalogRules),'Mapping updates do not change admitted runs');
   assert.ok(providerRequests.slice(catalogOffset).every(payload=>payload.messages[0].content.includes(configured.qaAgentMemory)),'Every category request uses admitted global instructions');
@@ -873,6 +895,42 @@ try {
   assert.deepEqual(threeCompleted.items[2].result.catalog_state.headers,phoneHeaders);
   assert.equal(threeCompleted.catalogOutputs.shipping.rows.length,3);
   assert.ok(threeCompleted.items.every((item:any)=>Array.isArray(item.result.catalog_state.cellWarnings)));
+  for (const modelName of ['z-ai/glm-5.3-flash', 'z-ai/glm-5.3-flashx']) {
+    await request('/api/provider-settings','PUT',{...configured,modelName,deepseekReasoningEffort:'max'},admin);
+    providerMode='catalog-glm-outage';
+    const fallbackOffset=providerRequests.length;
+    const fallbackRun=await startCatalog('single','three-phone',threeJob.id);assert.equal(fallbackRun.status,202);
+    stopWorker=startJobWorker(pool,scrape);
+    await waitFor(async()=>(await catalogRun(fallbackRun.body.id)).status==='completed','Catalog model fallback');
+    await stopWorker();stopWorker=undefined;
+    const requests=providerRequests.slice(fallbackOffset);
+    assert.deepEqual(requests.map(payload=>payload.model),[modelName,modelName,configured.modelName]);
+    assert.deepEqual(requests.map(payload=>payload.reasoning_effort),['low','low','none']);
+    assert.deepEqual(requests[2].messages,requests[0].messages,'Fallback reuses exact evidence and mapping');
+    const item=(await catalogRun(fallbackRun.body.id)).items.find((item:any)=>item.sku==='three-phone');
+    assert.equal(item.attempts,3);assert.equal(item.result.catalog_state.modelName,configured.modelName);
+    assert.ok(item.result.catalog_state.warnings.some((warning:string)=>warning.includes(configured.modelName)));
+    const state=(await pool.query("SELECT provider_state FROM job_run_items WHERE run_id=$1 AND sku='three-phone'",[fallbackRun.body.id])).rows[0].provider_state;
+    assert.deepEqual(state,{modelName:configured.modelName,lastFailure:{status:500,retryable:true}});
+  }
+  const resumedCatalog=await startCatalog('single','three-phone',threeJob.id);
+  await pool.query("UPDATE job_run_items SET status='running',attempts=2,started_at=now(),provider_state=$2 WHERE run_id=$1 AND sku='three-phone'",
+    [resumedCatalog.body.id,JSON.stringify({modelName:'z-ai/glm-5.3-flashx',lastFailure:{status:500,retryable:true}})]);
+  const recoveryOffset=providerRequests.length;
+  stopWorker=startJobWorker(pool,scrape);
+  await waitFor(async()=>(await catalogRun(resumedCatalog.body.id)).status==='completed','Catalog fallback after restart');
+  await stopWorker();stopWorker=undefined;
+  assert.deepEqual(providerRequests.slice(recoveryOffset).map(payload=>payload.model),[configured.modelName],'Restart uses only the remaining backup attempt');
+  providerMode='catalog-invalid-backup';
+  const invalidBackup=await startCatalog('single','three-phone',threeJob.id);
+  const invalidBackupOffset=providerRequests.length;
+  stopWorker=startJobWorker(pool,scrape);
+  await waitFor(async()=>(await catalogRun(invalidBackup.body.id)).status==='failed','Invalid Catalog backup fails safely');
+  await stopWorker();stopWorker=undefined;
+  const invalidItem=(await catalogRun(invalidBackup.body.id)).items.find((item:any)=>item.sku==='three-phone');
+  assert.equal(invalidItem.attempts,3);assert.match(invalidItem.error,/incomplete catalog row/);
+  assert.equal(providerRequests.length-invalidBackupOffset,3);
+  providerMode='success';
   assert.equal((await request('/api/provider-settings','PUT',{...configured,modelName:'custom/catalog'},admin)).status,200);
   const customCatalogOffset=providerRequests.length;
   const customCatalogRun=await startCatalog('single','three-phone',threeJob.id);assert.equal(customCatalogRun.status,202);

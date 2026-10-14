@@ -598,7 +598,18 @@ try {
 
   await page.getByRole('button', { name: 'LLM Settings', exact: true }).click();
   assert.equal(await page.getByLabel('Navigation model', {exact:true}).count(),0);
+  const reasoning = page.getByLabel('Reasoning level', { exact: true });
+  assert.equal(await reasoning.isEnabled(), true);
+  assert.equal(await reasoning.inputValue(), 'auto', 'DeepSeek defaults to Auto');
+  assert.deepEqual(await reasoning.locator('option').evaluateAll(options => options.map(option => (option as HTMLOptionElement).value)), ['auto', 'none', 'low', 'high', 'max']);
+  await reasoning.selectOption('none');
+  await page.getByLabel('Q&A model', { exact: true }).fill('z-ai/glm-5.3-flash');
+  assert.equal(await reasoning.inputValue(), 'low');
+  assert.equal(await reasoning.isEnabled(), true);
+  assert.deepEqual(await reasoning.locator('option').evaluateAll(options => options.map(option => (option as HTMLOptionElement).value)), ['low', 'high', 'max']);
+  await reasoning.selectOption('high');
   await page.getByLabel('Q&A model', { exact: true }).fill('draft/qa');
+  assert.equal(await reasoning.isDisabled(), true);
   const testing = page.getByRole('button', { name: 'Test Q&A API', exact: true });
   await testing.click();
   await page.getByText('Q&A (draft/qa): Testing…', { exact: true }).waitFor();
@@ -632,11 +643,17 @@ try {
   assert.equal(settingsWrites.length, 1);
   assert.equal(Object.hasOwn(settingsWrites[0], 'scrapperModelName'), false);
   assert.equal(settingsWrites[0].modelName, 'draft/qa');
+  assert.equal(settingsWrites[0].reasoningEffort, 'high', 'Saving persists the selected reasoning level');
+  assert.equal(settingsWrites[0].deepseekReasoningEffort, 'none', 'Saving retains the separate DeepSeek selection');
   assert.equal(settingsWrites[0].scraperModelName, 'draft/scrape');
   assert.doesNotMatch(JSON.stringify(settingsWrites), /apiKey|test-only/);
   await page.reload();
   await page.getByRole('button', { name: 'LLM Settings', exact: true }).click();
   await page.waitForFunction(input => (input as HTMLInputElement).value === 'draft/qa', await page.getByLabel('Q&A model', { exact: true }).elementHandle());
+  assert.equal(await page.getByLabel('Reasoning level', { exact: true }).inputValue(), 'high', 'The saved reasoning level survives reopening Settings');
+  await page.getByLabel('Q&A model', { exact: true }).fill('deepseek/deepseek-v4.1-flash');
+  assert.equal(await reasoning.inputValue(), 'none', 'Switching to DeepSeek restores its saved level');
+  await page.getByLabel('Q&A model', { exact: true }).fill('draft/qa');
   assert.equal(await page.getByLabel('API Key', { exact: true }).count(), 0);
   assert.equal(await page.getByLabel('Scraping / Markdown model', {exact:true}).inputValue(),'draft/scrape');
   savedSettings.providerConfigured = false;

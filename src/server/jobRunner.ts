@@ -62,6 +62,8 @@ export async function initializeJobRuns(pool: Pool) {
       started_at timestamptz, finished_at timestamptz, result jsonb, error text,
       PRIMARY KEY (run_id, sku)
     );
+    ALTER TABLE job_run_items ADD COLUMN IF NOT EXISTS provider_state jsonb;
+    ALTER TABLE job_run_items ADD COLUMN IF NOT EXISTS selected_image_urls jsonb NOT NULL DEFAULT '[]';
   `);
   const index = await pool.query("SELECT indexdef FROM pg_indexes WHERE schemaname = current_schema() AND indexname = 'job_runs_one_active'");
   if (!index.rows[0]?.indexdef.includes('UNIQUE')) throw new Error('Job-run uniqueness constraint is unavailable');
@@ -84,6 +86,7 @@ async function readRun(pool: Pool | PoolClient, id: string) {
     prepareCatalogOutputs(rows.map(item => item.snapshot), catalogMappings(run.configuration), true) : undefined;
   return { ...publicRun(run), catalogOutputs, items: rows.map(item => ({
     sku: item.sku, status: item.status, attempts: item.attempts,
+    selectedImageUrls: item.selected_image_urls || [],
     startedAt: item.started_at, finishedAt: item.finished_at, error: item.error,
     snapshot: unreviewedRunSnapshot(item.snapshot),
     result: item.result ? { ...item.result, raw_row: withoutRawQaResult(item.result.raw_row || {}) } : null,
@@ -294,6 +297,7 @@ async function executeRun(client: PoolClient, pool: Pool, run: any, owner: strin
     let snapshot: SkuData = unreviewedRunSnapshot(item.snapshot);
     let result: SkuData;
     let catalogTokens: SkuData['tokensUsed'];
+    let catalogModel = settings.modelName;
     try {
       if (Date.now() >= start + SKU_BUDGET_MS) throw new Error('SKU exceeded its five-minute execution budget');
       if (snapshot.source.url && !usableScrapedMarkdown(snapshot)) {
@@ -334,36 +338,42 @@ async function executeRun(client: PoolClient, pool: Pool, run: any, owner: strin
       const input = isCatalog
         ? prepareCatalogInput(snapshot, catalogMappingFor(run.configuration, snapshot.attribute_set), run.configuration.qaAgentMemory, settings.maxPageContentLength)
         : prepareQaInput(snapshot, run.configuration.attributeSets, run.configuration.qaAgentMemory, settings.maxPageContentLength);
-      const payload = buildQaRequest(settings, input).payload;
-      // DeepSeek thinking produced 30-second gateway failures for catalog rows; QA keeps its existing effort.
-      if (isCatalog && payload.model === 'deepseek/deepseek-v4.1-flash') payload.reasoning_effort = 'none';
+      const payload = buildQaRequest(settings, input, isCatalog ? 'catalog' : 'qa').payload;
+      const fallbackPayload = isCatalog && ['z-ai/glm-5.3-flash', 'z-ai/glm-5.3-flashx'].includes(payload.model)
+        ? buildQaRequest({ ...settings, modelName: 'deepseek/deepseek-v4.1-flash', deepseekReasoningEffort: 'none' }, input, 'catalog').payload : undefined;
       const response = await completeQa(payload, execution, {
         taskLabel: isCatalog ? 'Catalog' : 'QA',
         attempts: item.attempts,
         lastError: item.error,
-        beforeAttempt: async attempt => {
+        fallbackPayload, lastFailure: item.provider_state?.lastFailure,
+        beforeAttempt: async (attempt, request) => {
           execution.throwIfAborted();
+          catalogModel = (request as typeof payload).model;
+          item.provider_state = { ...item.provider_state, modelName: catalogModel };
           await transaction(client, async () => {
             await assertOwner(client, run.id, owner);
-            await client.query('UPDATE job_run_items SET attempts=$3 WHERE run_id=$1 AND sku=$2', [run.id, item.sku, attempt]);
+            await client.query('UPDATE job_run_items SET attempts=$3,provider_state=$4 WHERE run_id=$1 AND sku=$2',
+              [run.id, item.sku, attempt, JSON.stringify(item.provider_state)]);
           });
         },
         onAttemptError: async (attempt, error) => {
           execution.throwIfAborted();
+          item.provider_state = { ...item.provider_state, lastFailure: { status: error.status, retryable: error.retryable } };
           await transaction(client, async () => {
             await assertOwner(client, run.id, owner);
-            await client.query('UPDATE job_run_items SET error=$3 WHERE run_id=$1 AND sku=$2',
-              [run.id, item.sku, `${isCatalog ? 'Catalog' : 'QA'} attempt ${attempt}: ${error.message}`]);
+            await client.query('UPDATE job_run_items SET error=$3,provider_state=$4 WHERE run_id=$1 AND sku=$2',
+              [run.id, item.sku, `${isCatalog ? 'Catalog' : 'QA'} attempt ${attempt}: ${error.message}`, JSON.stringify(item.provider_state)]);
           });
         },
       });
       if (isCatalog) catalogTokens = cleanUsage(response.usage) as SkuData['tokensUsed'];
       if (isCatalog) {
         const catalog = parseCatalogResponse(response, input as ReturnType<typeof prepareCatalogInput>);
+        if (catalogModel !== settings.modelName) catalog.warnings.push(`Used ${catalogModel} because the selected model returned temporary failures.`);
         const timeTaken = Date.now() - start;
         result = { ...snapshot, status: 'completed', error: null, tokensUsed: catalogTokens, timeTaken,
           catalog_state: { ...catalog, headers: catalogMappingFor(run.configuration, snapshot.attribute_set).headers, status: 'completed',
-            revision: item.revision, jobId: run.job_id, tokensUsed: catalogTokens, timeTaken } };
+            revision: item.revision, jobId: run.job_id, modelName: catalogModel, tokensUsed: catalogTokens, timeTaken } };
       } else {
         result = withResult(snapshot, parseQaResponse(response, input as ReturnType<typeof prepareQaInput>), response.usage, Date.now() - start, run.job_id);
       }
@@ -374,7 +384,7 @@ async function executeRun(client: PoolClient, pool: Pool, run: any, owner: strin
         ...(isCatalog && catalogTokens ? { tokensUsed: catalogTokens } : {}),
         error: execution.aborted ? 'SKU exceeded its five-minute execution budget' : errorText(error), timeTaken: Date.now() - start };
       if (isCatalog) result.catalog_state = { status: 'failed', headers: catalogMappingFor(run.configuration, snapshot.attribute_set).headers,
-        warnings: [], revision: item.revision, jobId: run.job_id, error: result.error, timeTaken: result.timeTaken, tokensUsed: catalogTokens };
+        warnings: [], revision: item.revision, jobId: run.job_id, modelName: catalogModel, error: result.error, timeTaken: result.timeTaken, tokensUsed: catalogTokens };
     }
     try {
       // Keep the paid response in memory while retrying only its database commit.

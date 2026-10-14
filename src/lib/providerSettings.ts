@@ -7,6 +7,8 @@ export interface AppSettings {
   scraperConfigured: boolean;
   modelName: string;
   scraperModelName: string;
+  reasoningEffort: 'low' | 'high' | 'max';
+  deepseekReasoningEffort: 'auto' | 'none' | 'low' | 'high' | 'max';
   temperature: number;
   maxTokens: number;
   maxConcurrency: number;
@@ -19,6 +21,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   llmProvider: "openai-compatible", baseUrl: "", providerConfigured: false, scraperConfigured: false,
   modelName: "deepseek/deepseek-v4.1-flash", temperature: 0.1, maxTokens: 4096,
   scraperModelName: "z-ai/glm-5.3-flash",
+  reasoningEffort: 'low',
+  deepseekReasoningEffort: 'auto',
   maxConcurrency: 1, maxRetries: 2,
   maxPageContentLength: 40_000, qaAgentMemory: DEFAULT_QA_AGENT_MEMORY,
 };
@@ -39,6 +43,10 @@ export function normalizeSettings(settings: Partial<AppSettings> = {}): AppSetti
     modelName,
     scraperModelName: typeof settings.scraperModelName === "string" && settings.scraperModelName.trim()
       ? settings.scraperModelName.trim() : DEFAULT_SETTINGS.scraperModelName,
+    reasoningEffort: settings.reasoningEffort === 'high' || settings.reasoningEffort === 'max'
+      ? settings.reasoningEffort : DEFAULT_SETTINGS.reasoningEffort,
+    deepseekReasoningEffort: settings.deepseekReasoningEffort && ['auto', 'none', 'low', 'high', 'max'].includes(settings.deepseekReasoningEffort)
+      ? settings.deepseekReasoningEffort : DEFAULT_SETTINGS.deepseekReasoningEffort,
     temperature: typeof settings.temperature === "number" && settings.temperature >= 0 && settings.temperature <= 1
       ? settings.temperature : DEFAULT_SETTINGS.temperature,
     maxTokens: normalizeMaxTokens(settings.maxTokens),
@@ -53,6 +61,8 @@ export function editableSettings(settings: AppSettings) {
   return {
     modelName: settings.modelName,
     scraperModelName: settings.scraperModelName,
+    reasoningEffort: settings.reasoningEffort,
+    deepseekReasoningEffort: settings.deepseekReasoningEffort,
     temperature: settings.temperature, maxTokens: settings.maxTokens,
     maxPageContentLength: settings.maxPageContentLength, qaAgentMemory: settings.qaAgentMemory,
   };
