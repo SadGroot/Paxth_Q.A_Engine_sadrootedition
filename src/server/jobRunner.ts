@@ -346,10 +346,11 @@ async function executeRun(client: PoolClient, pool: Pool, run: any, owner: strin
         attempts: item.attempts,
         lastError: item.error,
         fallbackPayload, lastFailure: item.provider_state?.lastFailure,
+        lastReasoningEffort: item.provider_state?.reasoningEffort,
         beforeAttempt: async (attempt, request) => {
           execution.throwIfAborted();
           catalogModel = (request as typeof payload).model;
-          item.provider_state = { ...item.provider_state, modelName: catalogModel };
+          item.provider_state = { ...item.provider_state, modelName: catalogModel, reasoningEffort: (request as typeof payload).reasoning_effort };
           await transaction(client, async () => {
             await assertOwner(client, run.id, owner);
             await client.query('UPDATE job_run_items SET attempts=$3,provider_state=$4 WHERE run_id=$1 AND sku=$2',
@@ -367,15 +368,20 @@ async function executeRun(client: PoolClient, pool: Pool, run: any, owner: strin
         },
       });
       if (isCatalog) catalogTokens = cleanUsage(response.usage) as SkuData['tokensUsed'];
+      const reasoningNotice = catalogModel === 'deepseek/deepseek-v4.1-flash' && payload.reasoning_effort !== 'none' && item.provider_state?.reasoningEffort === 'none'
+        ? 'DeepSeek retried with thinking off after the requested reasoning level failed.' : '';
       if (isCatalog) {
         const catalog = parseCatalogResponse(response, input as ReturnType<typeof prepareCatalogInput>);
         if (catalogModel !== settings.modelName) catalog.warnings.push(`Used ${catalogModel} because the selected model returned temporary failures.`);
+        if (reasoningNotice) catalog.warnings.push(reasoningNotice);
         const timeTaken = Date.now() - start;
         result = { ...snapshot, status: 'completed', error: null, tokensUsed: catalogTokens, timeTaken,
           catalog_state: { ...catalog, headers: catalogMappingFor(run.configuration, snapshot.attribute_set).headers, status: 'completed',
             revision: item.revision, jobId: run.job_id, modelName: catalogModel, tokensUsed: catalogTokens, timeTaken } };
       } else {
-        result = withResult(snapshot, parseQaResponse(response, input as ReturnType<typeof prepareQaInput>), response.usage, Date.now() - start, run.job_id);
+        const qa = parseQaResponse(response, input as ReturnType<typeof prepareQaInput>);
+        if (reasoningNotice) qa.summary = `${qa.summary} ${reasoningNotice}`.trim();
+        result = withResult(snapshot, qa, response.usage, Date.now() - start, run.job_id);
       }
     } catch (error) {
       if (ownership.aborted) { clearInterval(monitor); throw error; }

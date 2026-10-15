@@ -1,0 +1,1941 @@
+{
+  "totalFiles": 125,
+  "phaseSize": 25,
+  "phases": [
+    {
+      "phase": 1,
+      "changed": 0,
+      "verified": 25,
+      "blocked": 0,
+      "pending": 0,
+      "files": [
+        {
+          "file": "E-HM-Weighing scales.xls",
+          "attributeSet": "E-HM-Weighing scales",
+          "source": "OneDrive_2_10-15-2026/E-HM-Weighing scales.xls",
+          "rulesFile": "docs/attribute-template-batch-50/E-HM-Weighing scales.md",
+          "status": "verified",
+          "headerRules": 44,
+          "sampleRows": [
+            3
+          ],
+          "evidence": "workbook",
+          "sourceSha256": "17ca4a0f5f4dc0da01042ef6d67e4a32929c73255411ca4afb19912785b2bc54",
+          "rulesSha256": "d97a187b37902202ffb55305c30a12d25190677f74c7aafda6ce906cc4e63894",
+          "limitation": null
+        },
+        {
+          "file": "Elec-Audio-Audio Accessories.xls",
+          "attributeSet": "Elec-Audio-Audio Accessories",
+          "source": "OneDrive_2_10-15-2026/Elec-Audio-Audio Accessories.xls",
+          "rulesFile": "docs/attribute-template-batch-50/Elec-Audio-Audio Accessories.md",
+          "status": "verified",
+          "headerRules": 43,
+          "sampleRows": [
+            3
+          ],
+          "evidence": "workbook",
+          "sourceSha256": "5083ba0a2fdeff32cf934bcefb0ea76466696677505adf8389e99064c8dfa573",
+          "rulesSha256": "f94840c562ad3d190f5d8ea2d34d4d57e07243d3c6e4addf35e3e8154a6ab44a",
+          "limitation": null
+        },
+        {
+          "file": "Elec-Audio-Headphones.xls",
+          "attributeSet": "Elec-Audio-Headphones",
+          "source": "OneDrive_2_10-15-2026/Elec-Audio-Headphones.xls",
+          "rulesFile": "docs/attribute-template-pilot/Elec-Audio-Headphones.md",
+          "status": "verified",
+          "headerRules": 63,
+          "sampleRows": [
+            3
+          ],
+          "evidence": "workbook",
+          "sourceSha256": "26d2a33bb0a556dd78f4926546914c7992cec122c5315b0e3bf189802c8b8448",
+          "rulesSha256": "e63c5e1a1af46fd5f97f83b3dd5d440314e6bf066af7560538fdeab34310eeb0",
+          "limitation": null
+        },
+        {
+          "file": "Elec-Audio-Musical Instruments.xls",
+          "attributeSet": "Elec-Audio-Musical Instruments",
+          "source": "OneDrive_2_10-15-2026/Elec-Audio-Musical Instruments.xls",
+          "rulesFile": "docs/attribute-template-batch-50/Elec-Audio-Musical Instruments.md",
+          "status": "verified",
+          "headerRules": 64,
+          "sampleRows": [
+            3
+          ],
+          "evidence": "workbook",
+          "sourceSha256": "eb489b47a74a5d84a18469a0df1fd8164025b397242dcabf2183b32b9383b6d2",
+          "rulesSha256": "66fd50ae7e7c521f587e06a69b955610af1b5bac567730942b233e5c09596fd8",
+          "limitation": null
+        },
+        {
+          "file": "Elec-Audio-Radio.xls",
+          "attributeSet": "Elec-Audio-Radio",
+          "source": "OneDrive_2_10-15-2026/Elec-Audio-Radio.xls",
+          "rulesFile": "docs/attribute-template-all/Elec-Audio-Radio.md",
+          "status": "verified",
+          "headerRules": 40,
+          "sampleRows": [
+            3
+          ],
+          "evidence": "workbook",
+          "sourceSha256": "7c9c8a3afc6da8fbe4488d91a48e75ce373131224c6461032e5e045c93096053",
+          "rulesSha256": "a904070afe2a8d9cf7b8ab3b6eb8050e308bcd3f6444aeaccfb7b77452e14b79",
+          "limitation": null
+        },
+        {
+          "file": "Elec-Audio-Receiver.xls",
+          "attributeSet": "Elec-Audio-Receiver",
+          "source": "OneDrive_2_10-15-2026/Elec-Audio-Receiver.xls",
+          "rulesFile": "docs/attribute-template-batch-50/Elec-Audio-Receiver.md",
+          "status": "verified",
+          "headerRules": 58,
+          "sampleRows": [
+            3
+          ],
+          "evidence": "workbook",
+          "sourceSha256": "d20fc96f534de15a49bc40cd613f5d7c68293a0638b88d1dea680c430f6f95e4",
+          "rulesSha256": "62b03dc0f14272fca9386d3fc079a1d9d07f8c4bad3ba195745597260303a701",
+          "limitation": null
+        },
+        {
+          "file": "Elec-Audio-Soundbars&Speakers.xls",
+          "attributeSet": "Elec-Audio-Soundbars&Speakers",
+          "source": "OneDrive_2_10-15-2026/Elec-Audio-Soundbars&Speakers.xls",
+          "rulesFile": "docs/attribute-template-batch-50/Elec-Audio-Soundbars&Speakers.md",
+          "status": "verified",
+          "headerRules": 64,
+          "sampleRows": [
+            3
+          ],
+          "evidence": "workbook",
+          "sourceSha256": "01fab2281c0e8173cb0b2c02566593ac581974e81edf6ce60d26d84301e7128e",
+          "rulesSha256": "f6594fd283d65a18be48d9bbdced664d129c31e1a74acda0a21bfcfef467700f",
+          "limitation": null
+        },
+        {
+          "file": "Elec-C&A-Laptops.xls",
+          "attributeSet": "Elec-C&A-Laptops",
+          "source": "OneDrive_2_10-15-2026/Elec-C&A-Laptops.xls",
+          "rulesFile": "docs/attribute-template-all/Elec-C&A-Laptops.md",
+          "status": "verified",
+          "headerRules": 55,
+          "sampleRows": [],
+          "evidence": "headers-only",
+          "sourceSha256": "fd099c3052e1048929a45d116732fedd3278515812dd8c9d3cca6f68606788bf",
+          "rulesSha256": "c08e2ed9450fe298827598248ef933eeb524d86152b9ef5f6c08ec0009ddcc92",
+          "limitation": "Headers exist, but the workbook has no product example; filling rules are explicit semantic fallbacks."
+        },
+        {
+          "file": "Elec-C&A-PCACC-External Storages.xls",
+          "attributeSet": "Elec-C&A-PCACC-External Storages",
+          "source": "OneDrive_2_10-15-2026/Elec-C&A-PCACC-External Storages.xls",
+          "rulesFile": "docs/attribute-template-batch-50/Elec-C&A-PCACC-External Storages.md",
+          "status": "verified",
+          "headerRules": 38,
+          "sampleRows": [
+            3
+          ],
+          "evidence": "workbook",
+          "sourceSha256": "6bed4ecbc0125b1fb647bb18a8e95a44b49dd0665febd11e845273793faf77ae",
+          "rulesSha256": "f734285f5ec5ae7fe6fa5034d6f66c4642c78fb2b6a5aa832515cce57280864b",
+          "limitation": null
+        },
+        {
+          "file": "Elec-C&A-PCACC-Laptop Stand & Mouse Pad.xls",
+          "attributeSet": "Elec-C&A-PCACC-Laptop Stand & Mouse Pad",
+          "source": "OneDrive_2_10-15-2026/Elec-C&A-PCACC-Laptop Stand & Mouse Pad.xls",
+          "rulesFile": "docs/attribute-template-batch-50/Elec-C&A-PCACC-Laptop Stand & Mouse Pad.md",
+          "status": "verified",
+          "headerRules": 37,
+          "sampleRows": [
+            3
+          ],
+          "evidence": "workbook",
+          "sourceSha256": "0610629e4637ac9cba4279c2aeb2b02896ee579f0ebf258448a955445b4c2122",
+          "rulesSha256": "d04400022579bb635d5291808920e6282eea708dbc4ff10afd730b2da0e3e41e",
+          "limitation": null
+        },
+        {
+          "file": "Elec-C&A-PCACC-Memory Card Adapters.xls",
+          "attributeSet": "Elec-C&A-PCACC-Memory Card Adapters",
+          "source": "OneDrive_2_10-15-2026/Elec-C&A-PCACC-Memory Card Adapters.xls",
+          "rulesFile": "docs/attribute-template-batch-50/Elec-C&A-PCACC-Memory Card Adapters.md",
+          "status": "verified",
+          "headerRules": 35,
+          "sampleRows": [
+            3
+          ],
+          "evidence": "workbook",
+          "sourceSha256": "e5d2871ee569c2cc1c961be0578e41c42625d10afc9de12891655e85d5d690d2",
+          "rulesSha256": "1fd11e5912e965a9ed5f01f1aa778de2f35df7968c612d4c0afaa69a2cfd7653",
+          "limitation": null
+        },
+        {
+          "file": "Elec-C&A-PCACC-Other PC Accessories.xls",
+          "attributeSet": "Elec-C&A-PCACC-Other PC Accessories",
+          "source": "OneDrive_2_10-15-2026/Elec-C&A-PCACC-Other PC Accessories.xls",
+          "rulesFile": "docs/attribute-template-batch-50/Elec-C&A-PCACC-Other PC Accessories.md",
+          "status": "verified",
+          "headerRules": 40,
+          "sampleRows": [
+            3
+          ],
+          "evidence": "workbook",
+          "sourceSha256": "ee21d205bb5bfc0a4cc6aa7985a254427d37f00739b5d504fcad0856d4ee9fd3",
+          "rulesSha256": "66c6664cef42b7561d5d64efe6bb367d12a7a02b527c332c8f6e4510ce3b1234",
+          "limitation": null
+        },
+        {
+          "file": "Elec-C&A-PCACC-PC Headsets & Speakers.xls",
+          "attributeSet": "Elec-C&A-PCACC-PC Headsets & Speakers",
+          "source": "OneDrive_2_10-15-2026/Elec-C&A-PCACC-PC Headsets & Speakers.xls",
+          "rulesFile": "docs/attribute-template-all/Elec-C&A-PCACC-PC Headsets & Speakers.md",
+          "status": "verified",
+          "headerRules": 45,
+          "sampleRows": [
+            3
+          ],
+          "evidence": "workbook",
+          "sourceSha256": "87ef841fc6377787fd5d4b3feb5520613539951735ddcdc1888e7c7c2612023f",
+          "rulesSha256": "392474ffb43a2b9fc9705327944a8595263284f433322525b15ca2381c32f316",
+          "limitation": null
+        },
+        {
+          "file": "Elec-C&A-PCACC-PC Keyboards & Mouse.xls",
+          "attributeSet": "Elec-C&A-PCACC-PC Keyboards & Mouse",
+          "source": "OneDrive_2_10-15-2026/Elec-C&A-PCACC-PC Keyboards & Mouse.xls",
+          "rulesFile": "docs/attribute-template-batch-50/Elec-C&A-PCACC-PC Keyboards & Mouse.md",
+          "status": "verified",
+          "headerRules": 41,
+          "sampleRows": [
+            3
+          ],
+          "evidence": "workbook",
+          "sourceSha256": "b97194a35f0754a69d810938dd7717d4d472ac9a2a9ed3a32e6f4cc90e97e38f",
+          "rulesSha256": "f9538ce8175036680423d05fa8d3931e1929b875e59792397ed1cfd8a0550988",
+          "limitation": null
+        },
+        {
+          "file": "Elec-C&A-PCACC-PC Monitors & Projectors.xls",
+          "attributeSet": "Elec-C&A-PCACC-PC Monitors & Projectors",
+          "source": "OneDrive_2_10-15-2026/Elec-C&A-PCACC-PC Monitors & Projectors.xls",
+          "rulesFile": "docs/attribute-template-all/Elec-C&A-PCACC-PC Monitors & Projectors.md",
+          "status": "verified",
+          "headerRules": 58,
+          "sampleRows": [
+            3,
+            4
+          ],
+          "evidence": "workbook",
+          "sourceSha256": "0d5f8038679fa1f807c774946447a24e384daf01bb3b9e086b897263375c80df",
+          "rulesSha256": "991e69c63e36c1f152087922faccd88c1cc1ab83a9da5fe376847f5ed0321a50",
+          "limitation": null
+        },
+        {
+          "file": "Elec-C&A-PCACC-USB Hubs.xls",
+          "attributeSet": "Elec-C&A-PCACC-USB Hubs",
+          "source": "OneDrive_2_10-15-2026/Elec-C&A-PCACC-USB Hubs.xls",
+          "rulesFile": "docs/attribute-template-all/Elec-C&A-PCACC-USB Hubs.md",
+          "status": "verified",
+          "headerRules": 36,
+          "sampleRows": [
+            3
+          ],
+          "evidence": "workbook",
+          "sourceSha256": "6a6b829e88a9d5267168a4f9ee1196f51c02490e56a9d72baf071afb21a6f520",
+          "rulesSha256": "8ddabf5a4af262c7bbc5376d98d2cec9cfe3638c7f7ceb5dc0d5139ae8e5870c",
+          "limitation": null
+        },
+        {
+          "file": "Elec-C&A-PCACC-Web camera.xls",
+          "attributeSet": "Elec-C&A-PCACC-Web camera",
+          "source": "OneDrive_2_10-15-2026/Elec-C&A-PCACC-Web camera.xls",
+          "rulesFile": "docs/attribute-template-batch-50/Elec-C&A-PCACC-Web camera.md",
+          "status": "verified",
+          "headerRules": 40,
+          "sampleRows": [
+            3
+          ],
+          "evidence": "workbook",
+          "sourceSha256": "a99af8da00e0f43ec40943e1c83d5caa4ac9a3627630f9402a62b092f6a9255b",
+          "rulesSha256": "2befe0ca005424797364817c1fcb493d3aebaef720df7159b42de48bc90e0fa0",
+          "limitation": null
+        },
+        {
+          "file": "Elec-C&A-T&A-Stylus.xls",
+          "attributeSet": "Elec-C&A-T&A-Styllus",
+          "source": "OneDrive_2_10-15-2026/Elec-C&A-T&A-Stylus.xls",
+          "rulesFile": "docs/attribute-template-all/Elec-C&A-T&A-Stylus.md",
+          "status": "verified",
+          "headerRules": 35,
+          "sampleRows": [
+            3
+          ],
+          "evidence": "workbook",
+          "sourceSha256": "de588dd1ac097420b50398c5610fafe7ef72a4015a4e0ab0effdda48747ffa86",
+          "rulesSha256": "62f4010e43759e6590293e9c7d5848a93324cdbe15c58b210758dda4f484683b",
+          "limitation": null
+        },
+        {
+          "file": "Elec-Gaming-Consoles.xls",
+          "attributeSet": "Elec-Gaming-Consoles",
+          "source": "OneDrive_2_10-15-2026/Elec-Gaming-Consoles.xls",
+          "rulesFile": "docs/attribute-template-batch-50/Elec-Gaming-Consoles.md",
+          "status": "verified",
+          "headerRules": 47,
+          "sampleRows": [
+            3
+          ],
+          "evidence": "workbook",
+          "sourceSha256": "94bb771e698a1a8c092cd65f8ce94eee0c15e626461373e526843a6d1602b246",
+          "rulesSha256": "389dfc46c02c0a8214721c52b9a2a3b21697f9221750e678bdb5811878697f23",
+          "limitation": null
+        },
+        {
+          "file": "Elec-Gaming-GA-Controllers.xls",
+          "attributeSet": "Elec-Gaming-GA-Controllers",
+          "source": "OneDrive_2_10-15-2026/Elec-Gaming-GA-Controllers.xls",
+          "rulesFile": "docs/attribute-template-batch-50/Elec-Gaming-GA-Controllers.md",
+          "status": "verified",
+          "headerRules": 40,
+          "sampleRows": [
+            3
+          ],
+          "evidence": "workbook",
+          "sourceSha256": "2625d13f0143e3b624eb77757f1bbeb2866f196a7fcc5aea09064f81b728240d",
+          "rulesSha256": "7d5f9e1918cbee4e1164ac094b444d263cde8971a40c8419054f6aa6eeb5de55",
+          "limitation": null
+        },
+        {
+          "file": "Elec-Gaming-GA-Gaming Chairs & Desks.xls",
+          "attributeSet": "Elec-Gaming-GA-Gaming Chairs & Desks",
+          "source": "OneDrive_2_10-15-2026/Elec-Gaming-GA-Gaming Chairs & Desks.xls",
+          "rulesFile": "docs/attribute-template-batch-50/Elec-Gaming-GA-Gaming Chairs & Desks.md",
+          "status": "verified",
+          "headerRules": 35,
+          "sampleRows": [
+            3
+          ],
+          "evidence": "workbook",
+          "sourceSha256": "50333b247ea001fd5e1a107dc7a7c027b2b597d8aab7dd421370d74993005647",
+          "rulesSha256": "1bf6a91a01333cf7c56207004ab621fa0e836f034885ddbe50edc14a8f425b7f",
+          "limitation": null
+        },
+        {
+          "file": "Elec-Gaming-GA-Gaming-Accessories.xls",
+          "attributeSet": "Elec-Gaming-GA-Gaming-Accessories",
+          "source": "OneDrive_2_10-15-2026/Elec-Gaming-GA-Gaming-Accessories.xls",
+          "rulesFile": "docs/attribute-template-batch-50/Elec-Gaming-GA-Gaming-Accessories.md",
+          "status": "verified",
+          "headerRules": 32,
+          "sampleRows": [
+            3
+          ],
+          "evidence": "workbook",
+          "sourceSha256": "1513317e399ecc473a670ead6f919cb553b60794acef91d607add5d68a84c783",
+          "rulesSha256": "4531297f9b5929707a74f35942bec60cc7d7950e8a6b06c6cebaee337f3be939",
+          "limitation": null
+        },
+        {
+          "file": "Elec-Gaming-Titles.xls",
+          "attributeSet": "Elec-Gaming-Titles",
+          "source": "OneDrive_2_10-15-2026/Elec-Gaming-Titles.xls",
+          "rulesFile": "docs/attribute-template-batch-50/Elec-Gaming-Titles.md",
+          "status": "verified",
+          "headerRules": 33,
+          "sampleRows": [
+            3
+          ],
+          "evidence": "workbook",
+          "sourceSha256": "6d6a85bff5c76cc96ebb09cd6706571798539442636988a7fe305b2e129ffabf",
+          "rulesSha256": "3766e422ebd1b4137efe621a9c6f1eb11b9d2045e2e481f4090f6e23ae0f31f6",
+          "limitation": null
+        },
+        {
+          "file": "Elec-Gaming-VR Headsets.xls",
+          "attributeSet": "Elec-Gaming-VR Headsets",
+          "source": "OneDrive_2_10-15-2026/Elec-Gaming-VR Headsets.xls",
+          "rulesFile": "docs/attribute-template-batch-50/Elec-Gaming-VR Headsets.md",
+          "status": "verified",
+          "headerRules": 36,
+          "sampleRows": [
+            3
+          ],
+          "evidence": "workbook",
+          "sourceSha256": "a9349b7550d111ac420b68b1cabdef5e2e8aa18fb21605f9a31c85df37f5335c",
+          "rulesSha256": "138764ceb32a62e80b406bd0d92bf45d8f4e0985584f85725d92ea8873cd1aa9",
+          "limitation": null
+        },
+        {
+          "file": "Elec-HA-Air Purifier Filters.xls",
+          "attributeSet": "Elec-HA-Air Purifier Filters",
+          "source": "OneDrive_2_10-15-2026/Elec-HA-Air Purifier Filters.xls",
+          "rulesFile": "docs/attribute-template-batch-50/Elec-HA-Air Purifier Filters.md",
+          "status": "verified",
+          "headerRules": 38,
+          "sampleRows": [
+            3
+          ],
+          "evidence": "workbook",
+          "sourceSha256": "a826fbb04912aad2e5a821e8c7ce7992d8f0141188f15a24b57eda3d1890e7c1",
+          "rulesSha256": "96ff84117ce9323014d72abf1f6478ce3b8db60932e5376f162e186975968453",
+          "limitation": null
+        }
+      ]
+    },
+    {
+      "phase": 2,
+      "changed": 0,
+      "verified": 25,
+      "blocked": 0,
+      "pending": 0,
+      "files": [
+        {
+          "file": "Elec-HA-Air Purifiers.xls",
+          "attributeSet": "Elec-HA-Air Purifiers",
+          "source": "OneDrive_2_10-15-2026/Elec-HA-Air Purifiers.xls",
+          "rulesFile": "docs/attribute-template-batch-50/Elec-HA-Air Purifiers.md",
+          "status": "verified",
+          "headerRules": 60,
+          "sampleRows": [
+            3
+          ],
+          "evidence": "workbook",
+          "sourceSha256": "abb508631c4a75f2379227e2ff98573855f0b3d6c5b3b570ad9ecbaf7b500d23",
+          "rulesSha256": "8508dcbe6ecaea05fec08d79d6b4b5d670055d2ddfed3059c2d79af7035bbc8e",
+          "limitation": null
+        },
+        {
+          "file": "Elec-HA-Disinfectant Equipment.xls",
+          "attributeSet": "Elec-HA-Disinfectant Equipment",
+          "source": "OneDrive_2_10-15-2026/Elec-HA-Disinfectant Equipment.xls",
+          "rulesFile": "docs/attribute-template-batch-50/Elec-HA-Disinfectant Equipment.md",
+          "status": "verified",
+          "headerRules": 47,
+          "sampleRows": [
+            3
+          ],
+          "evidence": "workbook",
+          "sourceSha256": "3bc75f2cb20424cf13c1628b85cba99aa7c8db05e980965e35288c508f695693",
+          "rulesSha256": "26a002a478eb0a7935434e7821e8068610a1495861387bca2a79e1f9dd739075",
+          "limitation": null
+        },
+        {
+          "file": "Elec-HA-Fans.xls",
+          "attributeSet": "Elec-HA-Fans",
+          "source": "OneDrive_2_10-15-2026/Elec-HA-Fans.xls",
+          "rulesFile": "docs/attribute-template-batch-50/Elec-HA-Fans.md",
+          "status": "verified",
+          "headerRules": 51,
+          "sampleRows": [
+            3
+          ],
+          "evidence": "workbook",
+          "sourceSha256": "1abbc80f5f54b53adb93c548073cbe6b31efafbc985f12b46a7875805db54c01",
+          "rulesSha256": "810aa209ef5ad7e1217653e241cb758f1edeabeda5235939518252c6d31c2ec1",
+          "limitation": null
+        },
+        {
+          "file": "Elec-HA-Garment Steamers.xls",
+          "attributeSet": "Elec-HA-Garment Steamers",
+          "source": "OneDrive_2_10-15-2026/Elec-HA-Garment Steamers.xls",
+          "rulesFile": "docs/attribute-template-batch-50/Elec-HA-Garment Steamers.md",
+          "status": "verified",
+          "headerRules": 44,
+          "sampleRows": [
+            3
+          ],
+          "evidence": "workbook",
+          "sourceSha256": "b1b7511b97303ebbd711a3a66b9ee2d5e60e5957e5a2d153b831dddebc0cd2af",
+          "rulesSha256": "12fd4c119a7025f741630d459e27c36e68200d406b29d3707f52e7fd347cc0c7",
+          "limitation": null
+        },
+        {
+          "file": "Elec-HA-Heaters.xls",
+          "attributeSet": "Elec-HA-Heaters",
+          "source": "OneDrive_2_10-15-2026/Elec-HA-Heaters.xls",
+          "rulesFile": "docs/attribute-template-batch-50/Elec-HA-Heaters.md",
+          "status": "verified",
+          "headerRules": 34,
+          "sampleRows": [
+            3
+          ],
+          "evidence": "workbook",
+          "sourceSha256": "261f509b312c108ee333a95f6d96d2b560fad5ca4f5370a4d627a07f9beea61a",
+          "rulesSha256": "b1c16b3be6a2098249c2a654d7ab3ae2583f40329f941dfcb751ec8b621f8142",
+          "limitation": null
+        },
+        {
+          "file": "Elec-HA-Insect Killers.xls",
+          "attributeSet": "Elec-HA-Insect Killers",
+          "source": "OneDrive_2_10-15-2026/Elec-HA-Insect Killers.xls",
+          "rulesFile": "docs/attribute-template-batch-50/Elec-HA-Insect Killers.md",
+          "status": "verified",
+          "headerRules": 46,
+          "sampleRows": [
+            3
+          ],
+          "evidence": "workbook",
+          "sourceSha256": "b14307e48c86e3cf02822637eaa0874546d905c832fe0281b0830c508ea239e2",
+          "rulesSha256": "f124e2308294bd0e17af6a4806fef939605042f3af194d77a364a71ccac7f1aa",
+          "limitation": null
+        },
+        {
+          "file": "Elec-HA-Irons.xls",
+          "attributeSet": "Elec-HA-Irons",
+          "source": "OneDrive_2_10-15-2026/Elec-HA-Irons.xls",
+          "rulesFile": "docs/attribute-template-batch-50/Elec-HA-Irons.md",
+          "status": "verified",
+          "headerRules": 40,
+          "sampleRows": [
+            3
+          ],
+          "evidence": "workbook",
+          "sourceSha256": "d74771bfc780717a6a640a554ff8f8248ae0c4fdbc334fe1dab6857fcec68ff9",
+          "rulesSha256": "81c7813819252d36f6d88c77d01cc23708f42f1537f0e8eca41b3974e6d7514d",
+          "limitation": null
+        },
+        {
+          "file": "Elec-HA-Pressure Washers.xls",
+          "attributeSet": "Elec-HA-Pressure Washers",
+          "source": "OneDrive_2_10-15-2026/Elec-HA-Pressure Washers.xls",
+          "rulesFile": "docs/attribute-template-batch-50/Elec-HA-Pressure Washers.md",
+          "status": "verified",
+          "headerRules": 45,
+          "sampleRows": [
+            3
+          ],
+          "evidence": "workbook",
+          "sourceSha256": "834ab94610aee5a70b580fbbd09bbd79e4cbfb1a78c7391649e54246961e79f0",
+          "rulesSha256": "00ec1f511f2178c6702f84336295bd59b1248880de2c77f469d3eec4d0655cf3",
+          "limitation": null
+        },
+        {
+          "file": "Elec-HA-Robotic Vacuum Cleaner.xls",
+          "attributeSet": "Elec-HA-Robotic Vacuum Cleaner",
+          "source": "OneDrive_2_10-15-2026/Elec-HA-Robotic Vacuum Cleaner.xls",
+          "rulesFile": "docs/attribute-template-batch-50/Elec-HA-Robotic Vacuum Cleaner.md",
+          "status": "verified",
+          "headerRules": 59,
+          "sampleRows": [
+            3
+          ],
+          "evidence": "workbook",
+          "sourceSha256": "8bbb2630c59af12c72d83c6c052d01cc44be3aa6c23ed20a10b9f74cb6b4b353",
+          "rulesSha256": "cbe9f793ac735005fd02be8fb7dcfc51ef0b685d987637425b08dc36fa5c311b",
+          "limitation": null
+        },
+        {
+          "file": "Elec-HA-Sewing Machines.xls",
+          "attributeSet": "Elec-HA-Sewing Machines",
+          "source": "OneDrive_2_10-15-2026/Elec-HA-Sewing Machines.xls",
+          "rulesFile": "docs/attribute-template-batch-50/Elec-HA-Sewing Machines.md",
+          "status": "verified",
+          "headerRules": 44,
+          "sampleRows": [
+            3
+          ],
+          "evidence": "workbook",
+          "sourceSha256": "db66c23058bfe356f2130229e0be3655f325fc13bad56adac1292287bead6283",
+          "rulesSha256": "af578d32051c2653096a659dd46520a40e22d8728289b72c3212ff87ab3c5641",
+          "limitation": null
+        },
+        {
+          "file": "Elec-HA-Vacuum Cleaner Accessories.xls",
+          "attributeSet": "Elec-HA-Vacuum Cleaner Accessories",
+          "source": "OneDrive_2_10-15-2026/Elec-HA-Vacuum Cleaner Accessories.xls",
+          "rulesFile": "docs/attribute-template-batch-50/Elec-HA-Vacuum Cleaner Accessories.md",
+          "status": "verified",
+          "headerRules": 31,
+          "sampleRows": [
+            3
+          ],
+          "evidence": "workbook",
+          "sourceSha256": "4b6f60bddb817f0a583dd83bef2b116efcf5f3cf42227869b4a4aca74980f786",
+          "rulesSha256": "b16cb7aee7f048fe1a51133d1992579120e0abcb1007737153b911b171e5a45b",
+          "limitation": null
+        },
+        {
+          "file": "Elec-HA-Vacuum Cleaners.xls",
+          "attributeSet": "Elec-HA-Vacuum Cleaners",
+          "source": "OneDrive_2_10-15-2026/Elec-HA-Vacuum Cleaners.xls",
+          "rulesFile": "docs/attribute-template-batch-50/Elec-HA-Vacuum Cleaners.md",
+          "status": "verified",
+          "headerRules": 53,
+          "sampleRows": [
+            3,
+            4
+          ],
+          "evidence": "workbook",
+          "sourceSha256": "6c6b437be26c8d867e74e6691eb4e2b443567bb90d12172c08c87503fe11d646",
+          "rulesSha256": "a00fcfe8a4eac43ab046cb7a73ada7f5dd8a0a447d17c8ca767cd825f74511e7",
+          "limitation": null
+        },
+        {
+          "file": "Elec-HA-Vacuum Cleaning Liquid.xls",
+          "attributeSet": "Elec-HA-Vacuum Cleaning Liquid",
+          "source": "OneDrive_2_10-15-2026/Elec-HA-Vacuum Cleaning Liquid.xls",
+          "rulesFile": "docs/attribute-template-all/Elec-HA-Vacuum Cleaning Liquid.md",
+          "status": "verified",
+          "headerRules": 35,
+          "sampleRows": [
+            3
+          ],
+          "evidence": "workbook",
+          "sourceSha256": "262e3154d20e99b42457029e59cdd4d68da3379c32f89fa423389ebd75b69476",
+          "rulesSha256": "efabf8f29e22c42a4101a229a10a7bf1e3c28d30474236a6f61ca7fb8b6dc20e",
+          "limitation": null
+        },
+        {
+          "file": "Elec-HA-Water Coolers_Dispensers.xls",
+          "attributeSet": "Elec-HA-Water Coolers/Dispensers",
+          "source": "OneDrive_2_10-15-2026/Elec-HA-Water Coolers_Dispensers.xls",
+          "rulesFile": "docs/attribute-template-all/Elec-HA-Water Coolers_Dispensers.md",
+          "status": "verified",
+          "headerRules": 54,
+          "sampleRows": [
+            3
+          ],
+          "evidence": "workbook",
+          "sourceSha256": "4485a7e6e918b1fcbdaa631c17390fa0bd7d6c6a925c1f70500c3c5c347f6328",
+          "rulesSha256": "17390ed1d57f18807be1928de76760c16797465ff22f7b8d95aae2749c0c6d61",
+          "limitation": null
+        },
+        {
+          "file": "Elec-HA-Water Filters & Accessories.xls",
+          "attributeSet": "Elec-HA-Water Filters & Accessories",
+          "source": "OneDrive_2_10-15-2026/Elec-HA-Water Filters & Accessories.xls",
+          "rulesFile": "docs/attribute-template-batch-50/Elec-HA-Water Filters & Accessories.md",
+          "status": "verified",
+          "headerRules": 46,
+          "sampleRows": [
+            3
+          ],
+          "evidence": "workbook",
+          "sourceSha256": "d74081c1be2f56a63843a64a31e644a8b36e211e4cf50816ea65d07ac520813d",
+          "rulesSha256": "58c942b3cafcb06f6ca7fa05099b48806d771a21a840aed5d33bc8f7c8308c5c",
+          "limitation": null
+        },
+        {
+          "file": "Elec-ITACC-Other IT Accessories.xls",
+          "attributeSet": "Elec-ITACC-Other IT Accessories",
+          "source": "OneDrive_2_10-15-2026/Elec-ITACC-Other IT Accessories.xls",
+          "rulesFile": "docs/attribute-template-batch-50/Elec-ITACC-Other IT Accessories.md",
+          "status": "verified",
+          "headerRules": 33,
+          "sampleRows": [
+            3
+          ],
+          "evidence": "workbook",
+          "sourceSha256": "8ade202c6c3c42ba37472aa46a6911a45cfcc81021081d3998028aa20cb6cb2c",
+          "rulesSha256": "e71dbbaf49acc6d12cbfe43f0fcb8bc66753331da31d75f2c22a962927e8544c",
+          "limitation": null
+        },
+        {
+          "file": "Elec-ITACC-Printers, Scanners & Accessories.xls",
+          "attributeSet": "Elec-ITACC-Printers, Scanners & Accessories",
+          "source": "OneDrive_2_10-15-2026/Elec-ITACC-Printers, Scanners & Accessories.xls",
+          "rulesFile": "docs/attribute-template-batch-50/Elec-ITACC-Printers, Scanners & Accessories.md",
+          "status": "verified",
+          "headerRules": 48,
+          "sampleRows": [
+            3
+          ],
+          "evidence": "workbook",
+          "sourceSha256": "f6047157f3669aaaf74878bd72ea23348af6fed6c9dae0cc63c3178c5d8d0bc3",
+          "rulesSha256": "10ebb1446b9d597cd17d004861b3eeef78d45b32351218271a03c6de2749222c",
+          "limitation": null
+        },
+        {
+          "file": "Elec-ITACC-Routers & Wi-Fi Range Extenders.xls",
+          "attributeSet": "Elec-ITACC-Routers & Wi-Fi Range Extenders",
+          "source": "OneDrive_2_10-15-2026/Elec-ITACC-Routers & Wi-Fi Range Extenders.xls",
+          "rulesFile": "docs/attribute-template-batch-50/Elec-ITACC-Routers & Wi-Fi Range Extenders.md",
+          "status": "verified",
+          "headerRules": 38,
+          "sampleRows": [
+            3
+          ],
+          "evidence": "workbook",
+          "sourceSha256": "c32e5453f7c70d54b77798cbd0cbec6238c8ac55027fc1eb11fbc3550425c163",
+          "rulesSha256": "a78bb056993b667f620d63c76e88b5b4c5ae7e0e81f0122ec6536bd96092194e",
+          "limitation": null
+        },
+        {
+          "file": "Elec-ITACC-Smart Devices & Accessories.xls",
+          "attributeSet": "Elec-ITACC-Smart Devices & Accessories",
+          "source": "OneDrive_2_10-15-2026/Elec-ITACC-Smart Devices & Accessories.xls",
+          "rulesFile": "docs/attribute-template-batch-50/Elec-ITACC-Smart Devices & Accessories.md",
+          "status": "verified",
+          "headerRules": 52,
+          "sampleRows": [
+            3
+          ],
+          "evidence": "workbook",
+          "sourceSha256": "4a98e1e0720110f810e17494e1ab484f62d9d9ee57e380b585b6fd9dd32325c4",
+          "rulesSha256": "6a58fd492abb9a82adf0562f41dd9b9987dea9d017ec24022685aa74ec1acb4a",
+          "limitation": null
+        },
+        {
+          "file": "Elec-ITACC-Softwares.xls",
+          "attributeSet": "Elec-ITACC-Softwares",
+          "source": "OneDrive_2_10-15-2026/Elec-ITACC-Softwares.xls",
+          "rulesFile": "docs/attribute-template-batch-50/Elec-ITACC-Softwares.md",
+          "status": "verified",
+          "headerRules": 35,
+          "sampleRows": [
+            3
+          ],
+          "evidence": "workbook",
+          "sourceSha256": "cf0b3ba832dce1f822664612614d0c5a07480b5e602bdaaa8b089ed0eb815d7b",
+          "rulesSha256": "2c54b7c6458fc94ed276a594b1a2d132c12722151e481e5e11019cef23cac54c",
+          "limitation": null
+        },
+        {
+          "file": "Elec-LA-Air Conditioners.xls",
+          "attributeSet": "Elec-LA-Air Conditioners",
+          "source": "OneDrive_2_10-15-2026/Elec-LA-Air Conditioners.xls",
+          "rulesFile": "docs/attribute-template-all/Elec-LA-Air Conditioners.md",
+          "status": "verified",
+          "headerRules": 72,
+          "sampleRows": [
+            3
+          ],
+          "evidence": "workbook",
+          "sourceSha256": "527a4a9663872306209099623224f13de10a28b50e74ddf6209a5bfd518da427",
+          "rulesSha256": "0cd554e52a59a4c8727054c35ad89046f8fe0072ebbe3d495b21940ccd31bafb",
+          "limitation": null
+        },
+        {
+          "file": "Elec-LA-Cooker Hoods.xls",
+          "attributeSet": "Elec-LA-Cooker Hoods",
+          "source": "OneDrive_2_10-15-2026/Elec-LA-Cooker Hoods.xls",
+          "rulesFile": "docs/attribute-template-batch-50/Elec-LA-Cooker Hoods.md",
+          "status": "verified",
+          "headerRules": 42,
+          "sampleRows": [
+            3
+          ],
+          "evidence": "workbook",
+          "sourceSha256": "adf86c174c553566fb32263f15b8f9e2d29e159e223cb93a703f8f7b8f1a5c3f",
+          "rulesSha256": "efdb071556cfd9e5d96aed0fb6668188255c1b1a0c3e1c5b4f26efefdccf43f5",
+          "limitation": null
+        },
+        {
+          "file": "Elec-LA-Cooking Hobs.xls",
+          "attributeSet": "Elec-LA-Cooking Hobs",
+          "source": "OneDrive_2_10-15-2026/Elec-LA-Cooking Hobs.xls",
+          "rulesFile": "docs/attribute-template-batch-50/Elec-LA-Cooking Hobs.md",
+          "status": "verified",
+          "headerRules": 47,
+          "sampleRows": [
+            3
+          ],
+          "evidence": "workbook",
+          "sourceSha256": "807c2fc2fae6c4b7677978d96730e69eb1b57dbc3d7d7ba9a8eef1734cc276fa",
+          "rulesSha256": "a8c9a0fd85802f82f8ba25c66b4c4f711e30300ca352052ac43d928e3208c696",
+          "limitation": null
+        },
+        {
+          "file": "Elec-LA-Cooking Ranges.xls",
+          "attributeSet": "Elec-LA-Cooking Ranges",
+          "source": "OneDrive_2_10-15-2026/Elec-LA-Cooking Ranges.xls",
+          "rulesFile": "docs/attribute-template-batch-50/Elec-LA-Cooking Ranges.md",
+          "status": "verified",
+          "headerRules": 44,
+          "sampleRows": [
+            3
+          ],
+          "evidence": "workbook",
+          "sourceSha256": "efa4dfbcfbb672ae27ef51b7940f4b39651ac6386a5748e204d78857f756a324",
+          "rulesSha256": "99eb510ffecec18bb2ba7e62d2eccd3e5984cfd53ead974d22ab25f6269a669d",
+          "limitation": null
+        },
+        {
+          "file": "Elec-LA-Dishwashers.xls",
+          "attributeSet": "Elec-LA-Dishwashers",
+          "source": "OneDrive_2_10-15-2026/Elec-LA-Dishwashers.xls",
+          "rulesFile": "docs/attribute-template-batch-50/Elec-LA-Dishwashers.md",
+          "status": "verified",
+          "headerRules": 45,
+          "sampleRows": [
+            3
+          ],
+          "evidence": "workbook",
+          "sourceSha256": "6fc0aac353a89b2d412fa41612d2369608d1e9b739da00981c1e86d201422482",
+          "rulesSha256": "9d62df7a5e6004631ba305076c782a3a9ff53a97431daef962da7118ae8f990d",
+          "limitation": null
+        }
+      ]
+    },
+    {
+      "phase": 3,
+      "changed": 0,
+      "verified": 24,
+      "blocked": 1,
+      "pending": 0,
+      "files": [
+        {
+          "file": "Elec-LA-Refrigerators.xls",
+          "attributeSet": "Elec-LA-Refrigerators",
+          "source": "OneDrive_2_10-15-2026/Elec-LA-Refrigerators.xls",
+          "rulesFile": "docs/attribute-template-batch-50/Elec-LA-Refrigerators.md",
+          "status": "verified",
+          "headerRules": 56,
+          "sampleRows": [
+            3
+          ],
+          "evidence": "workbook",
+          "sourceSha256": "822bed7d6491f8a8faa3354dc89e70bd6a660db6f099742939746e5e987b011d",
+          "rulesSha256": "2fc53aeaf0a723877dfbc78e8bb2155a56cc370bdc1906fe0c12cb450d191df9",
+          "limitation": null
+        },
+        {
+          "file": "Elec-LA-Washing Machines.xls",
+          "attributeSet": "Elec-LA-Washing Machines",
+          "source": "OneDrive_2_10-15-2026/Elec-LA-Washing Machines.xls",
+          "rulesFile": "docs/attribute-template-pilot/Elec-LA-Washing Machines.md",
+          "status": "verified",
+          "headerRules": 50,
+          "sampleRows": [
+            3
+          ],
+          "evidence": "workbook",
+          "sourceSha256": "2e7da1a440559c8c4be414c43e41ff84b71cb25c0033695bf3d60cc6848ee8f9",
+          "rulesSha256": "914a2fedfed1b0e97095576e2c1fc669ac703df61890e52f9da7731dbbcf5dd3",
+          "limitation": null
+        },
+        {
+          "file": "Elec-M&W-MA-Mobile Cases & Skins.xls",
+          "attributeSet": "Elec-M&W-MA-Mobile Cases & Skins",
+          "source": "OneDrive_2_10-15-2026/Elec-M&W-MA-Mobile Cases & Skins.xls",
+          "rulesFile": "docs/attribute-template-batch-50/Elec-M&W-MA-Mobile Cases & Skins.md",
+          "status": "verified",
+          "headerRules": 42,
+          "sampleRows": [
+            3
+          ],
+          "evidence": "workbook",
+          "sourceSha256": "7a144b895b89438a39c4d4814eacb08c881a9652a7a7e1ab7287537a44886309",
+          "rulesSha256": "5a6b2a21594cb6643d1346b52381dc6a93acbf912fcb8447a4925aea6868eab6",
+          "limitation": null
+        },
+        {
+          "file": "Elec-M&W-MA-Power Adapters_Chargers & Utility Cables.xls",
+          "attributeSet": "Elec-M&W-MA-Power Adapters / Chargers & Utility Cables",
+          "source": "OneDrive_2_10-15-2026/Elec-M&W-MA-Power Adapters_Chargers & Utility Cables.xls",
+          "rulesFile": "docs/attribute-template-all/Elec-M&W-MA-Power Adapters_Chargers & Utility Cables.md",
+          "status": "verified",
+          "headerRules": 42,
+          "sampleRows": [
+            3
+          ],
+          "evidence": "workbook",
+          "sourceSha256": "909d332861f79c62503acf3caa4e473ad737881e829fe3cb2eed2b2d89e9e4cf",
+          "rulesSha256": "dfcd5cde3d83c7f4db5de7b5c493ce5173c3c77453e6920a106b354c052eb71c",
+          "limitation": null
+        },
+        {
+          "file": "Elec-M&W-MA-Power Banks.xls",
+          "attributeSet": "Elec-M&W-MA-Power Banks",
+          "source": "OneDrive_2_10-15-2026/Elec-M&W-MA-Power Banks.xls",
+          "rulesFile": "docs/attribute-template-batch-50/Elec-M&W-MA-Power Banks.md",
+          "status": "verified",
+          "headerRules": 42,
+          "sampleRows": [
+            3
+          ],
+          "evidence": "workbook",
+          "sourceSha256": "c571d8ce1a764e561a0567c3db12cf060140629a697398cfe92da826fd41a1d8",
+          "rulesSha256": "110d5461acb9557997bd662137f9d53b270af2329d8602ddbb9433c6afc6df81",
+          "limitation": null
+        },
+        {
+          "file": "Elec-M&W-MA-Screen Protectors.xls",
+          "attributeSet": "Elec-M&W-MA-Screen Protectors",
+          "source": "OneDrive_2_10-15-2026/Elec-M&W-MA-Screen Protectors.xls",
+          "rulesFile": "docs/attribute-template-batch-50/Elec-M&W-MA-Screen Protectors.md",
+          "status": "verified",
+          "headerRules": 35,
+          "sampleRows": [
+            3
+          ],
+          "evidence": "workbook",
+          "sourceSha256": "ea6160d1db7b0e6717cf341091be9715b5186e66d64f677fde64650af7d7aa2c",
+          "rulesSha256": "8ef86513019b49240a28528b0b9b71bb8884f47433a2804f6dd54962a0a4bd9c",
+          "limitation": null
+        },
+        {
+          "file": "Elec-M&W-MA-Stands & Other Accessories.xls",
+          "attributeSet": "Elec-M&W-MA-Stands & Other Accessories",
+          "source": "OneDrive_2_10-15-2026/Elec-M&W-MA-Stands & Other Accessories.xls",
+          "rulesFile": "docs/attribute-template-batch-50/Elec-M&W-MA-Stands & Other Accessories.md",
+          "status": "verified",
+          "headerRules": 37,
+          "sampleRows": [
+            3
+          ],
+          "evidence": "workbook",
+          "sourceSha256": "6b63163a0634bb9360da697d1ee1aa4309a8f11678020ea2b8606bfd24a49e04",
+          "rulesSha256": "611c5cfede969582c9ba12d23f72f235c6c5c13f91dd2ea13b3a7dd50af85cff",
+          "limitation": null
+        },
+        {
+          "file": "Elec-M&W-Smartphones & Tablets.xls",
+          "attributeSet": "Elec-M&W-Smartphones & Tablets",
+          "source": "OneDrive_2_10-15-2026/Elec-M&W-Smartphones & Tablets.xls",
+          "rulesFile": "docs/attribute-template-all/Elec-M&W-Smartphones & Tablets.md",
+          "status": "verified",
+          "headerRules": 61,
+          "sampleRows": [
+            3
+          ],
+          "evidence": "workbook",
+          "sourceSha256": "606309a2d42c843660abd2751ff07d518eb744d2731e32f2f5a14dc69dc4ea63",
+          "rulesSha256": "933473a8500f720bff73a7378d986a89719cfb3a058a4031748849e4fca56a1d",
+          "limitation": null
+        },
+        {
+          "file": "Elec-M&W-W-Wearable Accessories.xls",
+          "attributeSet": "Elec-M&W-W-Wearable Accessories",
+          "source": "OneDrive_2_10-15-2026/Elec-M&W-W-Wearable Accessories.xls",
+          "rulesFile": "docs/attribute-template-batch-50/Elec-M&W-W-Wearable Accessories.md",
+          "status": "verified",
+          "headerRules": 39,
+          "sampleRows": [
+            3
+          ],
+          "evidence": "workbook",
+          "sourceSha256": "6f0e40f266a5e9ee04c3d9aa7cf3a56b0a4691da885106a4b786a24c1c0debc7",
+          "rulesSha256": "5adabd1fe7d3d9543704dd6da1835555603ee5e0b8781072356b9b8e3ab04fa8",
+          "limitation": null
+        },
+        {
+          "file": "Elec-PC-Electric Toothbrush.xls",
+          "attributeSet": "Elec-PC-Electric Toothbrush",
+          "source": "OneDrive_2_10-15-2026/Elec-PC-Electric Toothbrush.xls",
+          "rulesFile": "docs/attribute-template-batch-50/Elec-PC-Electric Toothbrush.md",
+          "status": "verified",
+          "headerRules": 46,
+          "sampleRows": [
+            3
+          ],
+          "evidence": "workbook",
+          "sourceSha256": "5ccfefa0cef8f7e03a21399c95f0d196797c9c81dfdfaceffa918a122260f072",
+          "rulesSha256": "4679935799021c1c8b204dda92fe1051bff68c28dffc25fd4b2361bb00d651f5",
+          "limitation": null
+        },
+        {
+          "file": "Elec-PC-Epilators & IPL Hair Remover.xls",
+          "attributeSet": "Elec-PC-Epilators & IPL Hair Remover",
+          "source": "OneDrive_2_10-15-2026/Elec-PC-Epilators & IPL Hair Remover.xls",
+          "rulesFile": "docs/attribute-template-batch-50/Elec-PC-Epilators & IPL Hair Remover.md",
+          "status": "verified",
+          "headerRules": 54,
+          "sampleRows": [
+            3
+          ],
+          "evidence": "workbook",
+          "sourceSha256": "3c4a123d9a4c0d3b6f7c81b57eb0ac0c933cafc1e05d5853365b7679fe2ccb13",
+          "rulesSha256": "8f911d6250f289eb39eb777cdcd86daa6291dd1cefed620dadb358cd8798522b",
+          "limitation": null
+        },
+        {
+          "file": "Elec-PC-Hair Dryers.xls",
+          "attributeSet": "Elec-PC-Hair Dryers",
+          "source": "OneDrive_2_10-15-2026/Elec-PC-Hair Dryers.xls",
+          "rulesFile": "docs/attribute-template-all/Elec-PC-Hair Dryers.md",
+          "status": "verified",
+          "headerRules": 42,
+          "sampleRows": [
+            3
+          ],
+          "evidence": "workbook",
+          "sourceSha256": "6564b077ba68495eae25dcecc9b98d8f23b56e3c658f094dad59789fbe266d2a",
+          "rulesSha256": "ac54776d01ed91eb70c9ab4618a6b61966215dcaf08715dc51ea2d2c1ed0742e",
+          "limitation": null
+        },
+        {
+          "file": "Elec-PC-Hair Stylers.xls",
+          "attributeSet": "Elec-PC-Hair Stylers",
+          "source": "OneDrive_2_10-15-2026/Elec-PC-Hair Stylers.xls",
+          "rulesFile": "docs/attribute-template-batch-50/Elec-PC-Hair Stylers.md",
+          "status": "verified",
+          "headerRules": 42,
+          "sampleRows": [
+            3
+          ],
+          "evidence": "workbook",
+          "sourceSha256": "a142c7888418ac072e47468d2534b5a93648ed879b04970718cbdf1086614a5a",
+          "rulesSha256": "4b5118ef89821bd6bc63705af1591d2113365f0300bfeb4bad6a46704648c284",
+          "limitation": null
+        },
+        {
+          "file": "Elec-PC-Shavers & Trimmers.xls",
+          "attributeSet": "Elec-PC-Shavers & Trimmers",
+          "source": "OneDrive_2_10-15-2026/Elec-PC-Shavers & Trimmers.xls",
+          "rulesFile": "docs/attribute-template-batch-50/Elec-PC-Shavers & Trimmers.md",
+          "status": "verified",
+          "headerRules": 53,
+          "sampleRows": [
+            3
+          ],
+          "evidence": "workbook",
+          "sourceSha256": "583a55cc1972c871c5b286b3e2e233abc798628344335f881073d0301b257622",
+          "rulesSha256": "5231ec2742b16760ab4e0d4e50cc290d6225b11479a1b51eb9caeef806a341da",
+          "limitation": null
+        },
+        {
+          "file": "Electrics-Kitchen Appliances.xls",
+          "attributeSet": "Electrics-Kitchen Appliances",
+          "source": "OneDrive_2_10-15-2026/Electrics-Kitchen Appliances.xls",
+          "rulesFile": "docs/attribute-template-all/Electrics-Kitchen Appliances.md",
+          "status": "verified",
+          "headerRules": 68,
+          "sampleRows": [
+            3
+          ],
+          "evidence": "workbook",
+          "sourceSha256": "b53bb1c807b5d488330d84cb0af60fb9d7717fb64c4bd6e75254def9a5a3563f",
+          "rulesSha256": "3889981f47263d7f8bcd55eb0a07f25cd76dad06f1f85651d2a320c4db0bec2f",
+          "limitation": null
+        },
+        {
+          "file": "Electronic-Camera.xls",
+          "attributeSet": "Electronic-Camera",
+          "source": "OneDrive_2_10-15-2026/Electronic-Camera.xls",
+          "rulesFile": "docs/attribute-template-all/Electronic-Camera.md",
+          "status": "verified",
+          "headerRules": 73,
+          "sampleRows": [
+            3
+          ],
+          "evidence": "partial-sample",
+          "sourceSha256": "8cc72565dd0ffdf31266391cf67183e94f711f4f12c5c614f90ffd06015df72c",
+          "rulesSha256": "681491e1c65c9dacdc72008ecca456dbcb512bd641d6f10aa1edf5efc3fd69f5",
+          "limitation": "Aligned fields use examples; misaligned specification fields remain explicit fallbacks."
+        },
+        {
+          "file": "Electronics-Medical Equipment.xls",
+          "attributeSet": "Electronics-Medical Equipment",
+          "source": "OneDrive_2_10-15-2026/Electronics-Medical Equipment.xls",
+          "rulesFile": "docs/attribute-template-all/Electronics-Medical Equipment.md",
+          "status": "blocked",
+          "headerRules": 0,
+          "sampleRows": [],
+          "evidence": "unreadable",
+          "sourceSha256": "e9c1b19371398eb49bd832098e0f15ef997a2628efe2e055d5c79d811896e238",
+          "rulesSha256": "907bdc35c54ca208bb7a6d35d6a1f8144bc0013c8271effef51fb0836b50081f",
+          "limitation": "IRM-protected workbook exposes no product headers or samples. An unprotected copy is required."
+        },
+        {
+          "file": "Electronics-TV.xls",
+          "attributeSet": "Electronics-TV",
+          "source": "OneDrive_2_10-15-2026/Electronics-TV.xls",
+          "rulesFile": "docs/attribute-template-all/Electronics-TV.md",
+          "status": "verified",
+          "headerRules": 70,
+          "sampleRows": [
+            3
+          ],
+          "evidence": "workbook",
+          "sourceSha256": "0a2ac728f08068d577719ac2fc1e856375975a97a863ecfec85633a021a68df1",
+          "rulesSha256": "f39db5202137c24104e55e78efe75c2c03f88c021eb4d5744a71e6f62075c9b8",
+          "limitation": null
+        },
+        {
+          "file": "H&B-Eyexpress-Sunglasses.xls",
+          "attributeSet": "H&B-Eyexpress-Sunglasses",
+          "source": "OneDrive_2_10-15-2026/H&B-Eyexpress-Sunglasses.xls",
+          "rulesFile": "docs/attribute-template-all/H&B-Eyexpress-Sunglasses.md",
+          "status": "verified",
+          "headerRules": 45,
+          "sampleRows": [
+            3
+          ],
+          "evidence": "workbook",
+          "sourceSha256": "7978312b1ed5ccd2c71b11e75a09e2368c15f38c929ad6db84b3e1b8b9883dba",
+          "rulesSha256": "2448987df33793a5e7748d19e4fdbf2f346808a9e4c01f4f681cfba7dd8e4a08",
+          "limitation": null
+        },
+        {
+          "file": "H&B-Make Up.xls",
+          "attributeSet": "H&B-Make Up",
+          "source": "OneDrive_2_10-15-2026/H&B-Make Up.xls",
+          "rulesFile": "docs/attribute-template-all/H&B-Make Up.md",
+          "status": "verified",
+          "headerRules": 47,
+          "sampleRows": [
+            3
+          ],
+          "evidence": "workbook",
+          "sourceSha256": "15c58c2bbe2ad5a03633286dabeed4a28217b702be10043c58a13cb116b70e9f",
+          "rulesSha256": "30bb7097c12dd23400722da91c0aa90ff9af1f6594aa54e522802ef9a40ec4b0",
+          "limitation": null
+        },
+        {
+          "file": "H&B-Perfumes.xls",
+          "attributeSet": "H&B-Perfumes",
+          "source": "OneDrive_2_10-15-2026/H&B-Perfumes.xls",
+          "rulesFile": "docs/attribute-template-all/H&B-Perfumes.md",
+          "status": "verified",
+          "headerRules": 40,
+          "sampleRows": [
+            3
+          ],
+          "evidence": "workbook",
+          "sourceSha256": "7cb6d5fc911197d1c26f01463dcbf4ea926d8c635cac154dcbeeb27727e100d4",
+          "rulesSha256": "f16c6389633eb5b9ff45809c802f7557c60cd44b27decf993da3250478caafe9",
+          "limitation": null
+        },
+        {
+          "file": "H&B-Skin Care.xls",
+          "attributeSet": "H&B-Skin Care",
+          "source": "OneDrive_2_10-15-2026/H&B-Skin Care.xls",
+          "rulesFile": "docs/attribute-template-all/H&B-Skin Care.md",
+          "status": "verified",
+          "headerRules": 45,
+          "sampleRows": [
+            3,
+            4
+          ],
+          "evidence": "workbook",
+          "sourceSha256": "2bb156c17a3ae4a838cf1560579d63148ff71d69d0e136884d2f30af8b388888",
+          "rulesSha256": "9ba35e1bf3d4995f88cb76cdfbc050cdf479f396939f0218afdedcb31162a1a7",
+          "limitation": null
+        },
+        {
+          "file": "H&L-Baby Accessories.xls",
+          "attributeSet": "H&L-Baby Accessories",
+          "source": "OneDrive_2_10-15-2026/H&L-Baby Accessories.xls",
+          "rulesFile": "docs/attribute-template-all/H&L-Baby Accessories.md",
+          "status": "verified",
+          "headerRules": 53,
+          "sampleRows": [
+            3
+          ],
+          "evidence": "workbook",
+          "sourceSha256": "2fdc7befa258031d511623cf3be76e879f7a53df0d8a57604ebe979808045524",
+          "rulesSha256": "6182090bc9f94226e22b6e2b37ac5943080de6d86e81ad982f64f5422baee103",
+          "limitation": null
+        },
+        {
+          "file": "H&L-Books.xls",
+          "attributeSet": "H&L-Books",
+          "source": "OneDrive_2_10-15-2026/H&L-Books.xls",
+          "rulesFile": "docs/attribute-template-all/H&L-Books.md",
+          "status": "verified",
+          "headerRules": 42,
+          "sampleRows": [
+            3
+          ],
+          "evidence": "workbook",
+          "sourceSha256": "a26da94b55690d2fab2efe327923d445566fbfd1b430e7de7697c8cbcd256bac",
+          "rulesSha256": "5bcb2b887bdbf998724dec2fc2bc8ddef4e847c55b47f7740bb7bac2626d0a33",
+          "limitation": null
+        },
+        {
+          "file": "H&L-C&D-Bakeware.xls",
+          "attributeSet": "H&L-C&D-Bakeware",
+          "source": "OneDrive_2_10-15-2026/H&L-C&D-Bakeware.xls",
+          "rulesFile": "docs/attribute-template-all/H&L-C&D-Bakeware.md",
+          "status": "verified",
+          "headerRules": 42,
+          "sampleRows": [
+            3
+          ],
+          "evidence": "workbook",
+          "sourceSha256": "100af9785c5a755878377acd2732dd12f082834f196da79722e181c7ed7a10ea",
+          "rulesSha256": "7b895b498f026fda46465ad19c4d60fa1c304412aa0da2c4774421135a497716",
+          "limitation": null
+        }
+      ]
+    },
+    {
+      "phase": 4,
+      "changed": 0,
+      "verified": 25,
+      "blocked": 0,
+      "pending": 0,
+      "files": [
+        {
+          "file": "H&L-C&D-Containers.xls",
+          "attributeSet": "H&L-C&D-Containers",
+          "source": "OneDrive_2_10-15-2026/H&L-C&D-Containers.xls",
+          "rulesFile": "docs/attribute-template-all/H&L-C&D-Containers.md",
+          "status": "verified",
+          "headerRules": 39,
+          "sampleRows": [
+            3
+          ],
+          "evidence": "workbook",
+          "sourceSha256": "a72786626c9b116c239e75c9f66e4a6ae5e3cefe8a84392ef0e18bc74ccf14b7",
+          "rulesSha256": "73ff0b053d0b7010c0599cdf378205290245a3331b19ba5ae6ab9884f5251efa",
+          "limitation": null
+        },
+        {
+          "file": "H&L-C&D-Cookware.xls",
+          "attributeSet": "H&L-C&D-Cookware",
+          "source": "OneDrive_2_10-15-2026/H&L-C&D-Cookware.xls",
+          "rulesFile": "docs/attribute-template-all/H&L-C&D-Cookware.md",
+          "status": "verified",
+          "headerRules": 42,
+          "sampleRows": [
+            3
+          ],
+          "evidence": "workbook",
+          "sourceSha256": "6e70f3edcaaa7de83f8da98fc25ac7160e952ded617aa0d8459475b3263e0f44",
+          "rulesSha256": "44de53f000b113a12378e6c82fa0a59617902baa689e7e6cb5eb4b6ee560905e",
+          "limitation": null
+        },
+        {
+          "file": "H&L-C&D-Serveware.xls",
+          "attributeSet": "H&L-C&D-Serveware",
+          "source": "OneDrive_2_10-15-2026/H&L-C&D-Serveware.xls",
+          "rulesFile": "docs/attribute-template-all/H&L-C&D-Serveware.md",
+          "status": "verified",
+          "headerRules": 47,
+          "sampleRows": [
+            3
+          ],
+          "evidence": "workbook",
+          "sourceSha256": "47e10cce26e81fde1308e60c527005441a7e1871e9e9267793e2f0feb42cb79b",
+          "rulesSha256": "480919fa3da137843e206e994dad02d9820a26234546485cda45ea1f6c8a6e04",
+          "limitation": null
+        },
+        {
+          "file": "H&L-HF-Bath Furnishing.xls",
+          "attributeSet": "H&L-HF-Bath Furnishing",
+          "source": "OneDrive_2_10-15-2026/H&L-HF-Bath Furnishing.xls",
+          "rulesFile": "docs/attribute-template-all/H&L-HF-Bath Furnishing.md",
+          "status": "verified",
+          "headerRules": 42,
+          "sampleRows": [
+            3
+          ],
+          "evidence": "workbook",
+          "sourceSha256": "5e6e7453f9550c304dc107d45c90daf57aa51b118fff88aaf24cadaeabd8d58b",
+          "rulesSha256": "78cc17d26b7790f1146f7daa65115775d840a779656bb4e4111d2ddc9adfb0aa",
+          "limitation": null
+        },
+        {
+          "file": "H&L-HF-Bed Room.xls",
+          "attributeSet": "H&L-HF-Bed Room",
+          "source": "OneDrive_2_10-15-2026/H&L-HF-Bed Room.xls",
+          "rulesFile": "docs/attribute-template-all/H&L-HF-Bed Room.md",
+          "status": "verified",
+          "headerRules": 42,
+          "sampleRows": [
+            3
+          ],
+          "evidence": "workbook",
+          "sourceSha256": "9b148e37f5d64627c46c661fcc140a52d1a65ca86c3d0731f8a61e6e6f0b7daf",
+          "rulesSha256": "19e38363a2899cd91440f1edf4e89cb3554418524999e1199e24835c2897fe85",
+          "limitation": null
+        },
+        {
+          "file": "H&L-HF-Cordless Phones.xls",
+          "attributeSet": "H&L-HF-Cordless Phones",
+          "source": "OneDrive_2_10-15-2026/H&L-HF-Cordless Phones.xls",
+          "rulesFile": "docs/attribute-template-all/H&L-HF-Cordless Phones.md",
+          "status": "verified",
+          "headerRules": 44,
+          "sampleRows": [
+            3
+          ],
+          "evidence": "workbook",
+          "sourceSha256": "fcaae32fa1c2b41272a03793c0e3a0d53e9a590e6b8537e1f228dba3ac6af5a3",
+          "rulesSha256": "ba917d07f18d883fadbc7b2d5c42c09af788c298d27f9a0277478cfee103d6cc",
+          "limitation": null
+        },
+        {
+          "file": "H&L-HF-Floor Covering.xls",
+          "attributeSet": "H&L-HF-Floor Covering",
+          "source": "OneDrive_2_10-15-2026/H&L-HF-Floor Covering.xls",
+          "rulesFile": "docs/attribute-template-all/H&L-HF-Floor Covering.md",
+          "status": "verified",
+          "headerRules": 32,
+          "sampleRows": [
+            3
+          ],
+          "evidence": "workbook",
+          "sourceSha256": "b4b0e97cdd77f6e8668ccc0e8e32ca32caf07af85d5546dc704e830d88c14cab",
+          "rulesSha256": "b632a31228c503f793c4285e05bc27fc71985eb7e4b99c20624489fa4e48eba2",
+          "limitation": null
+        },
+        {
+          "file": "H&L-HF-Living Room.xls",
+          "attributeSet": "H&L-HF-Living Room",
+          "source": "OneDrive_2_10-15-2026/H&L-HF-Living Room.xls",
+          "rulesFile": "docs/attribute-template-all/H&L-HF-Living Room.md",
+          "status": "verified",
+          "headerRules": 40,
+          "sampleRows": [
+            3
+          ],
+          "evidence": "workbook",
+          "sourceSha256": "6ce08ab4f43319bca4d2b7348442f1e5ee11a8b3c98c08559a310eaba463dccc",
+          "rulesSha256": "bf2ecd4b7433254e7251ffba3c8ca01df8f337d61946b278eede2f66c8d352df",
+          "limitation": null
+        },
+        {
+          "file": "H&L-HF-Mattress.xlsx",
+          "attributeSet": "H&L-HF-Mattress",
+          "source": "OneDrive_2_10-15-2026/H&L-HF-Mattress.xlsx",
+          "rulesFile": "docs/attribute-template-all/H&L-HF-Mattress.md",
+          "status": "verified",
+          "headerRules": 32,
+          "sampleRows": [],
+          "evidence": "headers-only",
+          "sourceSha256": "abb8986b62bf2ba3038f91198148a277a02736d14fac547cfb8e18c568999d45",
+          "rulesSha256": "4c59c4cbd83b94042508b629cded21c9e91d87710513520b9318d3a8bbce4403",
+          "limitation": "Headers exist, but the workbook has no product example; filling rules are explicit semantic fallbacks."
+        },
+        {
+          "file": "H&L-HF-Seasonal Decor.xls",
+          "attributeSet": "H&L-HF-Seasonal Decor",
+          "source": "OneDrive_2_10-15-2026/H&L-HF-Seasonal Decor.xls",
+          "rulesFile": "docs/attribute-template-all/H&L-HF-Seasonal Decor.md",
+          "status": "verified",
+          "headerRules": 36,
+          "sampleRows": [
+            3
+          ],
+          "evidence": "workbook",
+          "sourceSha256": "03537e87ac96c219b59fe2c43b52ac27b86285e791a91d724c88ee863f281bf6",
+          "rulesSha256": "f694202c2fb630fe0cbe058a648c39c0655f6d603a1aef05a6f46fa82f587bc7",
+          "limitation": null
+        },
+        {
+          "file": "H&L-HF-Sofas & Furnitures.xls",
+          "attributeSet": "H&L-HF-Sofas & Furnitures",
+          "source": "OneDrive_2_10-15-2026/H&L-HF-Sofas & Furnitures.xls",
+          "rulesFile": "docs/attribute-template-all/H&L-HF-Sofas & Furnitures.md",
+          "status": "verified",
+          "headerRules": 49,
+          "sampleRows": [
+            3
+          ],
+          "evidence": "workbook",
+          "sourceSha256": "25c637b01ee8895795b2526cd41902d528aaf109fd9478dcecdc3a2f16dc930e",
+          "rulesSha256": "a84ceb8d77888f0dc44d287ea6e216e53e7fe43917d39245648558bd8b1cb36c",
+          "limitation": null
+        },
+        {
+          "file": "H&L-HF-Table Linen & Curtains.xls",
+          "attributeSet": "H&L-HF-Table Linen & Curtains",
+          "source": "OneDrive_2_10-15-2026/H&L-HF-Table Linen & Curtains.xls",
+          "rulesFile": "docs/attribute-template-all/H&L-HF-Table Linen & Curtains.md",
+          "status": "verified",
+          "headerRules": 34,
+          "sampleRows": [
+            3
+          ],
+          "evidence": "workbook",
+          "sourceSha256": "1d4e48d3e891ae07fd4aac774b177c5fe68983f59ae2a5c23d570580f857326c",
+          "rulesSha256": "0ab466cae4952c60ad4b08552f870b46d82bae79730f65ddbe4021ef94af71df",
+          "limitation": null
+        },
+        {
+          "file": "H&L-Luggage.xls",
+          "attributeSet": "H&L-Luggage",
+          "source": "OneDrive_2_10-15-2026/H&L-Luggage.xls",
+          "rulesFile": "docs/attribute-template-pilot/H&L-Luggage.md",
+          "status": "verified",
+          "headerRules": 50,
+          "sampleRows": [
+            3
+          ],
+          "evidence": "workbook",
+          "sourceSha256": "415eabd280e4f872833406ae823c0a8246a1e389f996ac4e174523ae6fc81296",
+          "rulesSha256": "ed7a32c49951f91f800ccc23beb35a598a2d42e5d314cd5de76e09e21d444720",
+          "limitation": null
+        },
+        {
+          "file": "H&L-Outdoor & Accessories.xls",
+          "attributeSet": "H&L-Outdoor & Accessories",
+          "source": "OneDrive_2_10-15-2026/H&L-Outdoor & Accessories.xls",
+          "rulesFile": "docs/attribute-template-all/H&L-Outdoor & Accessories.md",
+          "status": "verified",
+          "headerRules": 53,
+          "sampleRows": [
+            3
+          ],
+          "evidence": "workbook",
+          "sourceSha256": "439513c22d1fde08573acfe9b8a37867cd941a1902779a8843b20b8a3f4f309e",
+          "rulesSha256": "6083c1c5fb4fd2bb40308e0f4b4eaccb7cb3cf1d565f41db52d304fe2aa9b35e",
+          "limitation": null
+        },
+        {
+          "file": "H&L-S&F-E&F-B&A-E-Bikes.xls",
+          "attributeSet": "H&L-S&F-E&F-B&A-E-Bikes",
+          "source": "OneDrive_2_10-15-2026/H&L-S&F-E&F-B&A-E-Bikes.xls",
+          "rulesFile": "docs/attribute-template-all/H&L-S&F-E&F-B&A-E-Bikes.md",
+          "status": "verified",
+          "headerRules": 52,
+          "sampleRows": [
+            3
+          ],
+          "evidence": "workbook",
+          "sourceSha256": "8a7906b348e04fc5aa33e411aac3758f09924242790a171a13ec4365d756d78a",
+          "rulesSha256": "84b79580570e4af915a96d7c852d612991d56207696c9341bdca3da89366461c",
+          "limitation": null
+        },
+        {
+          "file": "H&L-S&F-E&F-Bicycle & Accessories.xls",
+          "attributeSet": "H&L-S&F-E&F-Bicycle & Accessories",
+          "source": "OneDrive_2_10-15-2026/H&L-S&F-E&F-Bicycle & Accessories.xls",
+          "rulesFile": "docs/attribute-template-all/H&L-S&F-E&F-Bicycle & Accessories.md",
+          "status": "verified",
+          "headerRules": 42,
+          "sampleRows": [
+            3,
+            4,
+            5
+          ],
+          "evidence": "workbook",
+          "sourceSha256": "e47a5016ab0b0a1677f324a3890280d902fb7ee763b754ca201219921e80c9f2",
+          "rulesSha256": "b0e86f5c7b7b9fbb18c7c14e2230c67cf3991d81f2588fe31a303f549e02854f",
+          "limitation": null
+        },
+        {
+          "file": "H&L-S&F-E&F-EM-Cross Trainer.xls",
+          "attributeSet": "H&L-S&F-E&F-EM-Cross Trainer",
+          "source": "OneDrive_2_10-15-2026/H&L-S&F-E&F-EM-Cross Trainer.xls",
+          "rulesFile": "docs/attribute-template-all/H&L-S&F-E&F-EM-Cross Trainer.md",
+          "status": "verified",
+          "headerRules": 51,
+          "sampleRows": [
+            3,
+            4,
+            5
+          ],
+          "evidence": "workbook",
+          "sourceSha256": "4352d0688563c2de579150832d392a440af0b3a9ec21b901cf0188fcfc9d6d2b",
+          "rulesSha256": "48e283019126e91abd6feb6696a8ddaa662f6ee0c5f4a5b2ac247157dee00892",
+          "limitation": null
+        },
+        {
+          "file": "H&L-S&F-E&F-EM-Home GYM.xls",
+          "attributeSet": "H&L-S&F-E&F-EM-Home GYM",
+          "source": "OneDrive_2_10-15-2026/H&L-S&F-E&F-EM-Home GYM.xls",
+          "rulesFile": "docs/attribute-template-all/H&L-S&F-E&F-EM-Home GYM.md",
+          "status": "verified",
+          "headerRules": 48,
+          "sampleRows": [
+            3
+          ],
+          "evidence": "workbook",
+          "sourceSha256": "8a38fd1d8b7ab3d0403cdfe2a2f660615c4d3ee286ac7f2c651c80936310b7c7",
+          "rulesSha256": "cc27a82f257084d3994554a1c2045f67fcd01d30c2d2eed75f50591deeb681bd",
+          "limitation": null
+        },
+        {
+          "file": "H&L-S&F-E&F-EM-Magnetic Upright Bike.xls",
+          "attributeSet": "H&L-S&F-E&F-EM-Magnetic Upright Bike",
+          "source": "OneDrive_2_10-15-2026/H&L-S&F-E&F-EM-Magnetic Upright Bike.xls",
+          "rulesFile": "docs/attribute-template-all/H&L-S&F-E&F-EM-Magnetic Upright Bike.md",
+          "status": "verified",
+          "headerRules": 38,
+          "sampleRows": [
+            3
+          ],
+          "evidence": "workbook",
+          "sourceSha256": "930de3f1247c60df6c30d0e501f5250be73758dc2d0bd8e2b2a9a6ace5e2918b",
+          "rulesSha256": "5aa387024fbdd14cf15fbf6221f17c2e376f66f94bc98d1e1f3e02204cb94502",
+          "limitation": null
+        },
+        {
+          "file": "H&L-S&F-E&F-EM-Spinning Bike.xls",
+          "attributeSet": "H&L-S&F-E&F-EM-Spinning Bike",
+          "source": "OneDrive_2_10-15-2026/H&L-S&F-E&F-EM-Spinning Bike.xls",
+          "rulesFile": "docs/attribute-template-all/H&L-S&F-E&F-EM-Spinning Bike.md",
+          "status": "verified",
+          "headerRules": 44,
+          "sampleRows": [
+            3,
+            4
+          ],
+          "evidence": "workbook",
+          "sourceSha256": "0160c82f82ac39838fb4744c9b09c88102321f6cbfb631f9ab5455a4058b7eb4",
+          "rulesSha256": "a52dfffd99abd0500ad3cc778f9154b3ef1fce5fad6b7a1b5c34bf9b97bc3f9d",
+          "limitation": null
+        },
+        {
+          "file": "H&L-S&F-E&F-EM-Tread Mills.xls",
+          "attributeSet": "H&L-S&F-E&F-EM-Tread Mills",
+          "source": "OneDrive_2_10-15-2026/H&L-S&F-E&F-EM-Tread Mills.xls",
+          "rulesFile": "docs/attribute-template-all/H&L-S&F-E&F-EM-Tread Mills.md",
+          "status": "verified",
+          "headerRules": 50,
+          "sampleRows": [
+            3,
+            4
+          ],
+          "evidence": "workbook",
+          "sourceSha256": "f8e4fecd72c244e8e60210f4dbe9a9561977cc6aef79a8123b4b334996022bea",
+          "rulesSha256": "a8d8a535e3f8c601233368628007715c08bceb8da55e0d9c884b12c7f360552b",
+          "limitation": null
+        },
+        {
+          "file": "H&L-S&F-E&F-Fitness Accessories.xls",
+          "attributeSet": "H&L-S&F-E&F-Fitness Accessories",
+          "source": "OneDrive_2_10-15-2026/H&L-S&F-E&F-Fitness Accessories.xls",
+          "rulesFile": "docs/attribute-template-all/H&L-S&F-E&F-Fitness Accessories.md",
+          "status": "verified",
+          "headerRules": 40,
+          "sampleRows": [
+            3
+          ],
+          "evidence": "workbook",
+          "sourceSha256": "0858e5fcd80737ef9211fceda78a5c1d16fe4b27d35672bfdb9a95de8a102467",
+          "rulesSha256": "fd42c906b198eaed8d4f3b1fed32b930799c41ad929cc8fdad8734a01048e7af",
+          "limitation": null
+        },
+        {
+          "file": "H&L-S&F-E&F-Gym And Workout Equipments.xls",
+          "attributeSet": "H&L-S&F-E&F-Gym And Workout Equipments",
+          "source": "OneDrive_2_10-15-2026/H&L-S&F-E&F-Gym And Workout Equipments.xls",
+          "rulesFile": "docs/attribute-template-all/H&L-S&F-E&F-Gym And Workout Equipments.md",
+          "status": "verified",
+          "headerRules": 37,
+          "sampleRows": [
+            3
+          ],
+          "evidence": "workbook",
+          "sourceSha256": "d153ec3e157ece23e9a3e9760e0f9aa0f50b328dd3443814ccde41aadb177754",
+          "rulesSha256": "3c0830a7b961324aa76fb62b47bab77c83aec7a624ae676c571f1d6a1e380d61",
+          "limitation": null
+        },
+        {
+          "file": "H&L-S&F-E&F-Strength Training Equipments.xls",
+          "attributeSet": "H&L-S&F-E&F-Strength Training Equipments",
+          "source": "OneDrive_2_10-15-2026/H&L-S&F-E&F-Strength Training Equipments.xls",
+          "rulesFile": "docs/attribute-template-all/H&L-S&F-E&F-Strength Training Equipments.md",
+          "status": "verified",
+          "headerRules": 40,
+          "sampleRows": [
+            3,
+            4
+          ],
+          "evidence": "workbook",
+          "sourceSha256": "001e4578dd3e44c9d13119313ad3c05cf2d9ce18785602af2fc31767f86c7254",
+          "rulesSha256": "631e57a5fbccf885517716cb078b2dbf7b229cc56c12f14e4a0da5150f1b8165",
+          "limitation": null
+        },
+        {
+          "file": "H&L-S&F-E&F-Support Equipments.xls",
+          "attributeSet": "H&L-S&F-E&F-Support Equipments",
+          "source": "OneDrive_2_10-15-2026/H&L-S&F-E&F-Support Equipments.xls",
+          "rulesFile": "docs/attribute-template-all/H&L-S&F-E&F-Support Equipments.md",
+          "status": "verified",
+          "headerRules": 36,
+          "sampleRows": [
+            3
+          ],
+          "evidence": "workbook",
+          "sourceSha256": "213e70aafddf3dcb38e4d94366f4f9937c3006c1c84e66fe3c5f80d2f03baa41",
+          "rulesSha256": "46a0488564fc2706ffec4f2f9ecdea86329946b295a460d3578821e2cf43f185",
+          "limitation": null
+        }
+      ]
+    },
+    {
+      "phase": 5,
+      "changed": 0,
+      "verified": 25,
+      "blocked": 0,
+      "pending": 0,
+      "files": [
+        {
+          "file": "H&L-S&F-I&D-Racket Sports.xls",
+          "attributeSet": "H&L-S&F-I&D-Racket Sports",
+          "source": "OneDrive_2_10-15-2026/H&L-S&F-I&D-Racket Sports.xls",
+          "rulesFile": "docs/attribute-template-all/H&L-S&F-I&D-Racket Sports.md",
+          "status": "verified",
+          "headerRules": 41,
+          "sampleRows": [
+            3
+          ],
+          "evidence": "workbook",
+          "sourceSha256": "6b1a94c444600f5c70ce4cd95b06f63615719fcd050fb4ab2919b522cfc5cb01",
+          "rulesSha256": "b73752bedc1872a52e176b6b2fbb2557e294cd0d1aa53ac88adff39277a2985d",
+          "limitation": null
+        },
+        {
+          "file": "H&L-S&F-O&G-Team Sports.xls",
+          "attributeSet": "H&L-S&F-O&G-Team Sports",
+          "source": "OneDrive_2_10-15-2026/H&L-S&F-O&G-Team Sports.xls",
+          "rulesFile": "docs/attribute-template-all/H&L-S&F-O&G-Team Sports.md",
+          "status": "verified",
+          "headerRules": 41,
+          "sampleRows": [
+            3
+          ],
+          "evidence": "workbook",
+          "sourceSha256": "7be937345948ff434f3de48693452c0460fa9a3b223d69d1f364a7b692727101",
+          "rulesSha256": "292743a90752e56a4df3e03b2bf82cb3a8d2f6e1fa45ef37a8c850f518aa65a5",
+          "limitation": null
+        },
+        {
+          "file": "H&L-S&F-OG-Other Games & Accessories.xls",
+          "attributeSet": "H&L-S&F-OG-Other Games & Accessories",
+          "source": "OneDrive_2_10-15-2026/H&L-S&F-OG-Other Games & Accessories.xls",
+          "rulesFile": "docs/attribute-template-all/H&L-S&F-OG-Other Games & Accessories.md",
+          "status": "verified",
+          "headerRules": 35,
+          "sampleRows": [
+            3,
+            4,
+            5
+          ],
+          "evidence": "workbook",
+          "sourceSha256": "032f25569b1a55a77eb2fc9c27076d99f4e00cdc3562c80e25a499b21d7d05cb",
+          "rulesSha256": "ecd6ae5c2c164f409c3c80c9c81103fb3dc1d30995ba1f7fd2a58b6ca531391f",
+          "limitation": null
+        },
+        {
+          "file": "H&L-S&F-OG-TS-Golf Accessories.xls",
+          "attributeSet": "H&L-S&F-OG-TS-Golf Accessories",
+          "source": "OneDrive_2_10-15-2026/H&L-S&F-OG-TS-Golf Accessories.xls",
+          "rulesFile": "docs/attribute-template-all/H&L-S&F-OG-TS-Golf Accessories.md",
+          "status": "verified",
+          "headerRules": 34,
+          "sampleRows": [
+            3,
+            4,
+            5
+          ],
+          "evidence": "workbook",
+          "sourceSha256": "58169536d3f12c2accd9cf76510fad2abfeb130591bbabbb92367a0e4c4c2c96",
+          "rulesSha256": "a0a7dda361d52c54ec907fe20455416f1e86e3a957e635ac047c97e820f8fe71",
+          "limitation": null
+        },
+        {
+          "file": "H&L-S&F-OG-TS-Skating.xls",
+          "attributeSet": "H&L-S&F-OG-TS-Skating",
+          "source": "OneDrive_2_10-15-2026/H&L-S&F-OG-TS-Skating.xls",
+          "rulesFile": "docs/attribute-template-all/H&L-S&F-OG-TS-Skating.md",
+          "status": "verified",
+          "headerRules": 40,
+          "sampleRows": [
+            3,
+            4,
+            5
+          ],
+          "evidence": "workbook",
+          "sourceSha256": "0a3eec2957118da01e1a62988059428e0d62e7e40d2cd30b6b2a3e88d63ae804",
+          "rulesSha256": "3644ceafb764a845a73e64125c43125d3f9552c44faa7c756f2dab0324671e41",
+          "limitation": null
+        },
+        {
+          "file": "H&L-S&F-OG-Trampoline.xls",
+          "attributeSet": "H&L-S&F-OG-Trampoline",
+          "source": "OneDrive_2_10-15-2026/H&L-S&F-OG-Trampoline.xls",
+          "rulesFile": "docs/attribute-template-all/H&L-S&F-OG-Trampoline.md",
+          "status": "verified",
+          "headerRules": 42,
+          "sampleRows": [
+            3,
+            4,
+            5
+          ],
+          "evidence": "workbook",
+          "sourceSha256": "2c43bd0c48b1113311cfa34d48b22e2ae0fc088738642d033594feeec0259857",
+          "rulesSha256": "13c95b9074201365c2e2c5ad13981ccff0e37b6ea2c7a9c6824ae345bbcdc3d7",
+          "limitation": null
+        },
+        {
+          "file": "H&L-S&F-Swimming Pool & Accessories.xls",
+          "attributeSet": "H&L-S&F-Swimming Pool & Accessories",
+          "source": "OneDrive_2_10-15-2026/H&L-S&F-Swimming Pool & Accessories.xls",
+          "rulesFile": "docs/attribute-template-all/H&L-S&F-Swimming Pool & Accessories.md",
+          "status": "verified",
+          "headerRules": 40,
+          "sampleRows": [
+            3,
+            4
+          ],
+          "evidence": "workbook",
+          "sourceSha256": "729464320aae61646b2d6621ee880c559a6d74d761645d4e6aa74a8db5912be3",
+          "rulesSha256": "326d3af91778cef3cde6ddac5d77aacfc3b99c31dc5e38799ffefa44aaa4eaf9",
+          "limitation": null
+        },
+        {
+          "file": "H&L-Stationery-Art & Craft.xls",
+          "attributeSet": "H&L-Stationery-Art & Craft",
+          "source": "OneDrive_2_10-15-2026/H&L-Stationery-Art & Craft.xls",
+          "rulesFile": "docs/attribute-template-pilot/H&L-Stationery-Art & Craft.md",
+          "status": "verified",
+          "headerRules": 34,
+          "sampleRows": [
+            3
+          ],
+          "evidence": "workbook",
+          "sourceSha256": "90f2020b43e5fb2e26ada101e399aa9a44e7df71a3a21ce9fe9792a014034096",
+          "rulesSha256": "b4f0d26719813ac4b324ac0f4688e372881e6a906363153f2603265a352d89f2",
+          "limitation": null
+        },
+        {
+          "file": "H&L-Stationery-Calculators.xls",
+          "attributeSet": "H&L-Stationery-Calculators",
+          "source": "OneDrive_2_10-15-2026/H&L-Stationery-Calculators.xls",
+          "rulesFile": "docs/attribute-template-pilot/H&L-Stationery-Calculators.md",
+          "status": "verified",
+          "headerRules": 40,
+          "sampleRows": [
+            3
+          ],
+          "evidence": "workbook",
+          "sourceSha256": "f6ef6d1f70f6ae0feb5be8920da6521eb122a0ceb99f99bbc5eca00cf2a6864e",
+          "rulesSha256": "26c6e029d1b7669fa4765f693114cd86270265df54eccd6d82542c4542e75f52",
+          "limitation": null
+        },
+        {
+          "file": "H&L-Stationery-General Stationery.xls",
+          "attributeSet": "H&L-Stationery-General Stationery",
+          "source": "OneDrive_2_10-15-2026/H&L-Stationery-General Stationery.xls",
+          "rulesFile": "docs/attribute-template-all/H&L-Stationery-General Stationery.md",
+          "status": "verified",
+          "headerRules": 38,
+          "sampleRows": [
+            3
+          ],
+          "evidence": "workbook",
+          "sourceSha256": "46d1d1b9f4b148c84b596682a4b423ab3c42a54fef88905bd7be0649e2b22b16",
+          "rulesSha256": "71e765cd640e0273d2e4184ccbe106bf28eebae4f3e3a3b33f359d12a3ddcfe6",
+          "limitation": null
+        },
+        {
+          "file": "H&L-Stationery-Lunch Box & Water Bottle.xls",
+          "attributeSet": "H&L-Stationery-Lunch Box & Water Bottle",
+          "source": "OneDrive_2_10-15-2026/H&L-Stationery-Lunch Box & Water Bottle.xls",
+          "rulesFile": "docs/attribute-template-all/H&L-Stationery-Lunch Box & Water Bottle.md",
+          "status": "verified",
+          "headerRules": 37,
+          "sampleRows": [
+            3,
+            4
+          ],
+          "evidence": "workbook",
+          "sourceSha256": "b77f41a85126c74b58202752a5fda0892a53637520044a9c81aa38afc5a7d1cd",
+          "rulesSha256": "075eb8a79085c32bd2d5a6ddbabb3cc1e2eaaf7453590b333760f9e6129ba891",
+          "limitation": null
+        },
+        {
+          "file": "H&L-Stationery-Office Supplies.xls",
+          "attributeSet": "H&L-Stationery-Office Supplies",
+          "source": "OneDrive_2_10-15-2026/H&L-Stationery-Office Supplies.xls",
+          "rulesFile": "docs/attribute-template-all/H&L-Stationery-Office Supplies.md",
+          "status": "verified",
+          "headerRules": 33,
+          "sampleRows": [
+            3
+          ],
+          "evidence": "workbook",
+          "sourceSha256": "e1d4d4d2a1b5764fefc7bd08fffbd160a52e1964587dc10c57c64afeb0255f54",
+          "rulesSha256": "a4e0404549d8f755988a1e783d8210bd474aead1d877e64183e31a820c8dfbbd",
+          "limitation": null
+        },
+        {
+          "file": "H&L-Stationery-Pen & Pencil.xls",
+          "attributeSet": "H&L-Stationery-Pen & Pencil",
+          "source": "OneDrive_2_10-15-2026/H&L-Stationery-Pen & Pencil.xls",
+          "rulesFile": "docs/attribute-template-all/H&L-Stationery-Pen & Pencil.md",
+          "status": "verified",
+          "headerRules": 37,
+          "sampleRows": [
+            3
+          ],
+          "evidence": "workbook",
+          "sourceSha256": "1f543c7ad9e96e31fe6bf3ed5d1f0e29dad8b49100482827f57c2561b9d32af4",
+          "rulesSha256": "d60f81e0c5f582ce335347a4abf9f899c52252c0995968aa27f13ed5a7e1c1c7",
+          "limitation": null
+        },
+        {
+          "file": "H&L-Stationery-School Bags.xls",
+          "attributeSet": "H&L-Stationery-School Bags",
+          "source": "OneDrive_2_10-15-2026/H&L-Stationery-School Bags.xls",
+          "rulesFile": "docs/attribute-template-all/H&L-Stationery-School Bags.md",
+          "status": "verified",
+          "headerRules": 39,
+          "sampleRows": [
+            3
+          ],
+          "evidence": "workbook",
+          "sourceSha256": "c29bec58bef7f7e18754e0d627c83693ee7662631c3fe87b34f4a35059aad7e2",
+          "rulesSha256": "5913675ce13f8ed291f353491c0b2f40293326ca42989308a227f6c77a5d66c1",
+          "limitation": null
+        },
+        {
+          "file": "H&L-Stationery-School Stationery.xls",
+          "attributeSet": "H&L-Stationery-School Stationery",
+          "source": "OneDrive_2_10-15-2026/H&L-Stationery-School Stationery.xls",
+          "rulesFile": "docs/attribute-template-all/H&L-Stationery-School Stationery.md",
+          "status": "verified",
+          "headerRules": 34,
+          "sampleRows": [
+            3
+          ],
+          "evidence": "workbook",
+          "sourceSha256": "4f5d8956efe73be6433e998138caa56dd4e640d7d6a92ac05e2bdb248d75a920",
+          "rulesSha256": "8987178805a45dd8435152d3d90e73e4dc88fab11c06a27911bf2bb3f742e87c",
+          "limitation": null
+        },
+        {
+          "file": "H&L-Toys-E-Bikes.xls",
+          "attributeSet": "H&L-Toys-E-Bikes",
+          "source": "OneDrive_2_10-15-2026/H&L-Toys-E-Bikes.xls",
+          "rulesFile": "docs/attribute-template-all/H&L-Toys-E-Bikes.md",
+          "status": "verified",
+          "headerRules": 45,
+          "sampleRows": [
+            3,
+            4
+          ],
+          "evidence": "workbook",
+          "sourceSha256": "1267335f6db2fde1db37a68a9218a21b27336136bcf27bbd644132d3d6f294a5",
+          "rulesSha256": "15060e7f5a18daf72cd167fb3188a42a490397dbf21082a81f1c8bb4e9ddba7e",
+          "limitation": null
+        },
+        {
+          "file": "H&L-Toys-Play Ground & Inflated Games.xls",
+          "attributeSet": "H&L-Toys-Play Ground & Inflated Games",
+          "source": "OneDrive_2_10-15-2026/H&L-Toys-Play Ground & Inflated Games.xls",
+          "rulesFile": "docs/attribute-template-all/H&L-Toys-Play Ground & Inflated Games.md",
+          "status": "verified",
+          "headerRules": 41,
+          "sampleRows": [
+            3
+          ],
+          "evidence": "workbook",
+          "sourceSha256": "5426477ee0b0843e108b84affd6ebe135961d231b81e8a8bde04a7a834ae4df4",
+          "rulesSha256": "1902056bc3cc63f0afa17a7e5280b69720a95de85f82344f0637467008775946",
+          "limitation": null
+        },
+        {
+          "file": "H&L-Toys.xls",
+          "attributeSet": "H&L-Toys",
+          "source": "OneDrive_2_10-15-2026/H&L-Toys.xls",
+          "rulesFile": "docs/attribute-template-all/H&L-Toys.md",
+          "status": "verified",
+          "headerRules": 41,
+          "sampleRows": [
+            3
+          ],
+          "evidence": "workbook",
+          "sourceSha256": "07e8b27c66a660e3eb137b3edbcec57a18948da771ab951cfd46e9bd22fdf0ef",
+          "rulesSha256": "36c4cf07a78a8e5bc41ca6a3306079861abae8744807b563f1b99eb76bfae2b5",
+          "limitation": null
+        },
+        {
+          "file": "HH-CE-Brushes, Mops & Buckets.xls",
+          "attributeSet": "HH-CE-Brushes, Mops & Buckets",
+          "source": "OneDrive_2_10-15-2026/HH-CE-Brushes, Mops & Buckets.xls",
+          "rulesFile": "docs/attribute-template-all/HH-CE-Brushes, Mops & Buckets.md",
+          "status": "verified",
+          "headerRules": 37,
+          "sampleRows": [
+            3
+          ],
+          "evidence": "workbook",
+          "sourceSha256": "0140667bb8f766816f60f3c5cea399b0c7968a4487c29b1d904b07d75f131599",
+          "rulesSha256": "5cd622b88b9780187ca1ce6af7ba603317f5bce461841eade6d72de7d4a6a82d",
+          "limitation": null
+        },
+        {
+          "file": "HH-EA-Light & Bulbs.xls",
+          "attributeSet": "HH-EA-Light & Bulbs",
+          "source": "OneDrive_2_10-15-2026/HH-EA-Light & Bulbs.xls",
+          "rulesFile": "docs/attribute-template-all/HH-EA-Light & Bulbs.md",
+          "status": "verified",
+          "headerRules": 55,
+          "sampleRows": [
+            3
+          ],
+          "evidence": "workbook",
+          "sourceSha256": "223327e3d91ce6d228108a109299bda37b7f247d04eaff13792cd8ab6128628f",
+          "rulesSha256": "c37b2b1c28a8f3f304bfdee021eed8b44a6c20cee21ee0fa5450d40df987bece",
+          "limitation": null
+        },
+        {
+          "file": "HH-EA-Plug & Extenstion.xls",
+          "attributeSet": "HH-EA-Plug & Extenstion",
+          "source": "OneDrive_2_10-15-2026/HH-EA-Plug & Extenstion.xls",
+          "rulesFile": "docs/attribute-template-all/HH-EA-Plug & Extenstion.md",
+          "status": "verified",
+          "headerRules": 38,
+          "sampleRows": [
+            3
+          ],
+          "evidence": "workbook",
+          "sourceSha256": "a78bbd3162ed47441f6c77debf3e056726b52848bb9d1df4b4e1e24ec959d9f2",
+          "rulesSha256": "10b0e4ec0f5852e7f7d5be7ca316d14e3a52296cd976d6aeaf523d1c6849eaa2",
+          "limitation": null
+        },
+        {
+          "file": "HH-EA-Power tools.xls",
+          "attributeSet": "HH-EA-Power tools",
+          "source": "OneDrive_2_10-15-2026/HH-EA-Power tools.xls",
+          "rulesFile": "docs/attribute-template-all/HH-EA-Power tools.md",
+          "status": "verified",
+          "headerRules": 48,
+          "sampleRows": [
+            3
+          ],
+          "evidence": "workbook",
+          "sourceSha256": "31765ccffdd53606f99349969e80e01e8bc68486ad2608e9feef083e75b443d1",
+          "rulesSha256": "5b51749c2b534f438b01fd93680f47a48b724d5a3f3f2f632c4efe5300705f39",
+          "limitation": null
+        },
+        {
+          "file": "HH-HE-Car Accessories.xls",
+          "attributeSet": "HH-HE-Car Accessories",
+          "source": "OneDrive_2_10-15-2026/HH-HE-Car Accessories.xls",
+          "rulesFile": "docs/attribute-template-all/HH-HE-Car Accessories.md",
+          "status": "verified",
+          "headerRules": 67,
+          "sampleRows": [
+            3
+          ],
+          "evidence": "workbook",
+          "sourceSha256": "58ee956761c853850c86a8d35f08855e9daa497232c1e30a8ae218058ad3a86f",
+          "rulesSha256": "74eeb2e46d28d28054c62824358c277eee8459719dab59e5fa8a9143435df506",
+          "limitation": null
+        },
+        {
+          "file": "HH-HE-Plastic Storage and Buckets.xls",
+          "attributeSet": "HH-HE-Plastic Storage and Buckets",
+          "source": "OneDrive_2_10-15-2026/HH-HE-Plastic Storage and Buckets.xls",
+          "rulesFile": "docs/attribute-template-all/HH-HE-Plastic Storage and Buckets.md",
+          "status": "verified",
+          "headerRules": 38,
+          "sampleRows": [
+            3
+          ],
+          "evidence": "workbook",
+          "sourceSha256": "7622145e30c65d530b4a7ec4aa24d64472192f9e9c237dcfe5a5f0839443d491",
+          "rulesSha256": "2d3e3c9b98809c9b5e211199cd2a7ba15b18dfa811cd151af7f01606eb0f57bf",
+          "limitation": null
+        },
+        {
+          "file": "HH-LE-Laundary Accessories.xls",
+          "attributeSet": "HH-LE-Laundary Accessories",
+          "source": "OneDrive_2_10-15-2026/HH-LE-Laundary Accessories.xls",
+          "rulesFile": "docs/attribute-template-all/HH-LE-Laundary Accessories.md",
+          "status": "verified",
+          "headerRules": 46,
+          "sampleRows": [
+            3
+          ],
+          "evidence": "workbook",
+          "sourceSha256": "9fb1e05e570b897347ab126beaa5fecb6ca71069aa67a16d3dbc95d2c11980f2",
+          "rulesSha256": "414afe5c8319430bf3238f954c1d8848f390520e65ab8e4e485f2f839d7151a0",
+          "limitation": null
+        }
+      ]
+    }
+  ]
+}

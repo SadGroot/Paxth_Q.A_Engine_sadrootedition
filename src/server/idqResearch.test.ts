@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { runIdqProduct } from './idqResearch';
 import { emptyIdqProgress, IDQ_LIMITS, type IdqConfig, type IdqInput, type IdqMapping, type IdqProgress } from '../lib/idq';
 import { normalizeSettings } from '../lib/providerSettings';
+import { completeQa } from './provider';
 
 const input: IdqInput = { url: 'https://store.example/product', attributeSet: 'Phones', columns: ['attributes__url','attributes__attribute_set','sku','name','image_url'], values: { attributes__url: 'https://store.example/product', attributes__attribute_set: 'Phones', sku: '0001', name: 'Phone X100 Blue 128GB', image_url: '' } };
 const mapping: IdqMapping = { id: 'phones', name: 'Phones', headers: ['sku','name','capacity','color','image_url'], requirements: { sku:'mandatory',name:'mandatory',capacity:'mandatory',color:'optional',image_url:'optional' }, rules: '' };
@@ -21,6 +22,8 @@ const deps = {
   search: async () => { searches++; return [{title:'Manufacturer X100',url:'https://maker.example/x100',snippet:'Unusable snippet'}]; },
   image: async (url: string) => { images.push(url); },
   complete: async (payload: any, _signal: AbortSignal, options: any) => {
+    assert.equal(payload.model, config.settings.modelName);
+    assert.equal(payload.reasoning_effort, 'medium', 'IDQ JSON and tool calls use the saved effort');
     modelCalls++; await options.beforeAttempt(1, payload);
     if (!payload.tools) return response(payload.messages[1].content.includes('"task":"Extract title') ? baseline : {matches:[{sourceId:'research-1',kind:'manufacturer',verdict:'exact',quote:'Phone X100 Blue 128GB.'}],facts,conflicts:[],issues:[]});
     const toolOutputs = payload.messages.filter((m: any) => m.role === 'tool');
@@ -100,4 +103,36 @@ await assert.rejects(runIdqProduct(input,mapping,{...config,mode:'scraped'},empt
 assert.equal(initialReads,1);
 await runIdqProduct(input,mapping,{...config,mode:'scraped'},snapshot,new AbortController().signal,async()=>{},multiDeps);
 assert.equal(initialReads,2);assert.equal(snapshot.sources.length,2);
+
+// A worker restart after a failed request preserves the remaining attempt and effort recovery.
+const originalFetch = globalThis.fetch, originalUrl = process.env.LLM_BASE_URL, originalKey = process.env.LLM_API_KEY;
+process.env.LLM_BASE_URL = 'https://provider.example/v1'; process.env.LLM_API_KEY = 'test-only';
+const interrupted = new AbortController();
+let saved = emptyIdqProgress();
+const requests: any[] = [];
+try {
+  globalThis.fetch = async (_url, init) => {
+    requests.push(JSON.parse(init!.body as string));
+    return Response.json({}, { status: 500 });
+  };
+  await assert.rejects(runIdqProduct(input, mapping, { ...config, mode: 'scraped' }, emptyIdqProgress(), interrupted.signal, async progress => {
+    saved = structuredClone(progress);
+    if (progress.calls.baseline?.lastFailure) interrupted.abort();
+  }, { ...deps, complete: completeQa }));
+  assert.equal(saved.calls.baseline.attempts, 1);
+  assert.deepEqual(saved.calls.baseline.lastFailure, { status: 500, retryable: true });
+  globalThis.fetch = async (_url, init) => {
+    const payload = JSON.parse(init!.body as string); requests.push(payload);
+    return Response.json(payload.tools ? response({ done: true }) : response(payload.messages[1].content.includes('"task":"Extract title') ? baseline : { matches: [], facts: [], conflicts: [], issues: [] }));
+  };
+  await runIdqProduct(input, mapping, { ...config, mode: 'scraped' }, saved, new AbortController().signal, async () => {}, { ...deps, complete: completeQa });
+  assert.deepEqual(requests.slice(0, 2).map(payload => payload.reasoning_effort), ['medium', 'none']);
+  assert.equal(saved.calls.baseline.attempts, 2);
+  assert.equal(saved.calls.baseline.reasoningEffort, 'none');
+  assert.ok(saved.result!.issues.some(issue => issue.includes('thinking off')));
+} finally {
+  globalThis.fetch = originalFetch;
+  if (originalUrl === undefined) delete process.env.LLM_BASE_URL; else process.env.LLM_BASE_URL = originalUrl;
+  if (originalKey === undefined) delete process.env.LLM_API_KEY; else process.env.LLM_API_KEY = originalKey;
+}
 console.log('IDQ modes, first image, bounded tools, blocked pages, deadlines, cancellation and capture/research restart passed.');

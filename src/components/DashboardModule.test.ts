@@ -600,9 +600,9 @@ try {
   assert.equal(await page.getByLabel('Navigation model', {exact:true}).count(),0);
   const reasoning = page.getByLabel('Reasoning level', { exact: true });
   assert.equal(await reasoning.isEnabled(), true);
-  assert.equal(await reasoning.inputValue(), 'auto', 'DeepSeek defaults to Auto');
-  assert.deepEqual(await reasoning.locator('option').evaluateAll(options => options.map(option => (option as HTMLOptionElement).value)), ['auto', 'none', 'low', 'high', 'max']);
-  await reasoning.selectOption('none');
+  assert.equal(await reasoning.inputValue(), 'medium', 'DeepSeek defaults to Medium');
+  assert.deepEqual(await reasoning.locator('option').evaluateAll(options => options.map(option => (option as HTMLOptionElement).value)), ['auto', 'none', 'low', 'medium', 'high', 'max']);
+  await reasoning.selectOption('medium');
   await page.getByLabel('Q&A model', { exact: true }).fill('z-ai/glm-5.3-flash');
   assert.equal(await reasoning.inputValue(), 'low');
   assert.equal(await reasoning.isEnabled(), true);
@@ -644,7 +644,7 @@ try {
   assert.equal(Object.hasOwn(settingsWrites[0], 'scrapperModelName'), false);
   assert.equal(settingsWrites[0].modelName, 'draft/qa');
   assert.equal(settingsWrites[0].reasoningEffort, 'high', 'Saving persists the selected reasoning level');
-  assert.equal(settingsWrites[0].deepseekReasoningEffort, 'none', 'Saving retains the separate DeepSeek selection');
+  assert.equal(settingsWrites[0].deepseekReasoningEffort, 'medium', 'Saving retains the separate DeepSeek selection');
   assert.equal(settingsWrites[0].scraperModelName, 'draft/scrape');
   assert.doesNotMatch(JSON.stringify(settingsWrites), /apiKey|test-only/);
   await page.reload();
@@ -652,7 +652,10 @@ try {
   await page.waitForFunction(input => (input as HTMLInputElement).value === 'draft/qa', await page.getByLabel('Q&A model', { exact: true }).elementHandle());
   assert.equal(await page.getByLabel('Reasoning level', { exact: true }).inputValue(), 'high', 'The saved reasoning level survives reopening Settings');
   await page.getByLabel('Q&A model', { exact: true }).fill('deepseek/deepseek-v4.1-flash');
-  assert.equal(await reasoning.inputValue(), 'none', 'Switching to DeepSeek restores its saved level');
+  assert.equal(await reasoning.inputValue(), 'medium', 'Switching to DeepSeek restores its saved level');
+  await testing.click();
+  await page.getByText('Q&A (deepseek/deepseek-v4.1-flash): Passed.', { exact: true }).waitFor();
+  assert.deepEqual(chatRequests.at(-1), { modelName: 'deepseek/deepseek-v4.1-flash', purpose: 'qa', deepseekReasoningEffort: 'medium' });
   await page.getByLabel('Q&A model', { exact: true }).fill('draft/qa');
   assert.equal(await page.getByLabel('API Key', { exact: true }).count(), 0);
   assert.equal(await page.getByLabel('Scraping / Markdown model', {exact:true}).inputValue(),'draft/scrape');

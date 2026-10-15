@@ -4,6 +4,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { fetchChatCompletion, ProviderError, providerResponseError } from '../lib/chatCompletion';
 import { DEFAULT_SETTINGS, editableSettings, normalizeSettings, type AppSettings } from '../lib/providerSettings';
 import { extractLLMResponseContent } from '../lib/llmResponse';
+import { buildQaRequest } from '../lib/qaRequest';
 import { transaction } from './database';
 
 export function getProviderCredentials() {
@@ -41,7 +42,7 @@ export function validateSettings(value: any) {
     typeof value.modelName !== 'string' || !value.modelName.trim() || value.modelName.length > 256 ||
     (value.scraperModelName !== undefined && (typeof value.scraperModelName !== 'string' || !value.scraperModelName.trim() || value.scraperModelName.length > 256)) ||
     (value.reasoningEffort !== undefined && !['low', 'high', 'max'].includes(value.reasoningEffort)) ||
-    (value.deepseekReasoningEffort !== undefined && !['auto', 'none', 'low', 'high', 'max'].includes(value.deepseekReasoningEffort)) ||
+    (value.deepseekReasoningEffort !== undefined && !['auto', 'none', 'low', 'medium', 'high', 'max'].includes(value.deepseekReasoningEffort)) ||
     typeof value.temperature !== 'number' || !Number.isFinite(value.temperature) || value.temperature < 0 || value.temperature > 1 ||
     !Number.isSafeInteger(value.maxTokens) || value.maxTokens < 1 || value.maxTokens > 65536 ||
     !Number.isSafeInteger(value.maxPageContentLength) || value.maxPageContentLength < 1 || value.maxPageContentLength > 200000 ||
@@ -54,23 +55,39 @@ export async function completeQa(payload: unknown, signal: AbortSignal, options:
   attempts?: number; beforeAttempt?: (attempt: number, payload: unknown) => Promise<void>;
   lastError?: string | null; onAttemptError?: (attempt: number, error: ProviderError) => Promise<void>;
   fallbackPayload?: unknown; lastFailure?: { status: number; retryable: boolean };
+  lastReasoningEffort?: string;
 } = {}) {
   const label = options.taskLabel || 'QA';
   const maxAttempts = options.maxAttempts ?? 3;
+  const budget = maxAttempts === 3 ? 'three' : maxAttempts === 2 ? 'two' : 'one';
   const exhaustedMessage = options.lastError?.trim()
-    ? `${label} exhausted its three-attempt budget. Last recorded failure: ${options.lastError} Start a fresh run to retry this SKU.`
-    : `${label} used all three attempts before a result was saved; execution was interrupted. Start a fresh run to retry this SKU.`;
+    ? `${label} exhausted its ${budget}-attempt budget. Last recorded failure: ${options.lastError} Start a fresh run to retry this SKU.`
+    : `${label} used all ${budget} attempts before a result was saved; execution was interrupted. Start a fresh run to retry this SKU.`;
   signal.throwIfAborted();
-  if ((options.attempts ?? 0) >= 3) throw new ProviderError(exhaustedMessage);
+  if ((options.attempts ?? 0) >= maxAttempts) throw new ProviderError(exhaustedMessage);
   const { baseUrl, apiKey } = getProviderCredentials();
   let lastFailure = options.lastFailure;
+  let thinkingDisabled = options.lastReasoningEffort === 'none';
   for (let attempt = (options.attempts ?? 0) + 1; attempt <= maxAttempts; attempt++) {
     signal.throwIfAborted();
-    const request = attempt === 3 && options.fallbackPayload && lastFailure?.retryable &&
+    let request = attempt === 3 && options.fallbackPayload && lastFailure?.retryable &&
       [408, 500, 502, 503, 504, 529].includes(lastFailure.status) ? options.fallbackPayload : payload;
+    const selected = request as { model?: string; reasoning_effort?: string };
+    if (selected?.model === DEFAULT_SETTINGS.modelName && (thinkingDisabled || lastFailure?.retryable &&
+        [400, 422, 408, 500, 502, 503, 504, 529].includes(lastFailure.status))) {
+      request = { ...selected, reasoning_effort: 'none' };
+      thinkingDisabled = true;
+    }
     try {
       const response = await fetchChatCompletion(baseUrl, apiKey, request, signal, () => options.beforeAttempt?.(attempt, request) ?? Promise.resolve(), 120_000);
-      if (!response.ok) throw await providerResponseError(response, apiKey);
+      if (!response.ok) {
+        const error = await providerResponseError(response, apiKey);
+        // Only an explicit reasoning-parameter rejection can recover from a client error.
+        if (selected?.model === DEFAULT_SETTINGS.modelName && (request as typeof selected).reasoning_effort !== 'none' &&
+            [400, 422].includes(error.status) && /reasoning_effort/i.test(error.message) &&
+            /unsupported|not supported|invalid|not permitted|not allowed|must be|one of/i.test(error.message)) error.retryable = true;
+        throw error;
+      }
       try { return await response.json(); } catch { throw new ProviderError('Model returned invalid JSON'); }
     } catch (error) {
       signal.throwIfAborted();
@@ -101,10 +118,11 @@ export function registerProviderRoutes(app: Express, pool: Pool) {
   app.post('/api/chat', async (req, res) => {
     if (res.locals.user?.role !== 'admin') { res.status(403).json({ error: 'Administrator access required' }); return; }
     if (!req.body || typeof req.body !== 'object' || Array.isArray(req.body) ||
-      Object.keys(req.body).some(key => !['modelName', 'purpose'].includes(key)) ||
+      Object.keys(req.body).some(key => !['modelName', 'purpose', 'deepseekReasoningEffort'].includes(key)) ||
       (req.body.purpose !== undefined && !['qa', 'scrape'].includes(req.body.purpose)) ||
+      (req.body.deepseekReasoningEffort !== undefined && !['auto', 'none', 'low', 'medium', 'high', 'max'].includes(req.body.deepseekReasoningEffort)) ||
       (req.body.modelName !== undefined && (typeof req.body.modelName !== 'string' || !req.body.modelName.trim() || req.body.modelName.length > 256))) {
-      res.status(400).json({ error: 'Test API accepts optional modelName and purpose (qa or scrape) only' }); return;
+      res.status(400).json({ error: 'Test API accepts optional modelName, purpose (qa or scrape), and deepseekReasoningEffort only' }); return;
     }
     const controller = new AbortController();
     const disconnect = () => { if (!res.writableEnded) controller.abort(); };
@@ -114,15 +132,19 @@ export function registerProviderRoutes(app: Express, pool: Pool) {
       const credentials = getProviderCredentials();
       const purpose = req.body.purpose ?? 'qa';
       let modelName = req.body.modelName?.trim();
+      let settings = DEFAULT_SETTINGS;
       if (modelName === undefined) {
-        const settings = await getProviderSettings(pool);
+        settings = await getProviderSettings(pool);
         modelName = purpose === 'scrape' ? settings.scraperModelName : settings.modelName;
       }
       signal.throwIfAborted();
-      const response = await fetchChatCompletion(credentials.baseUrl, credentials.apiKey, {
-        model: modelName, max_tokens: DEFAULT_SETTINGS.maxTokens,
+      const { response_format: _format, ...payload } = buildQaRequest({ ...settings, modelName,
+        deepseekReasoningEffort: req.body.deepseekReasoningEffort ?? settings.deepseekReasoningEffort,
+        maxTokens: DEFAULT_SETTINGS.maxTokens,
+      }, {
         messages: [{ role: 'user', content: 'Reply with OK to confirm API connectivity.' }],
-      }, signal);
+      }, purpose === 'scrape' ? 'catalog' : 'qa').payload;
+      const response = await fetchChatCompletion(credentials.baseUrl, credentials.apiKey, payload, signal);
       if (!response.ok) throw await providerResponseError(response, credentials.apiKey);
       let data: any;
       try { data = await response.json(); } catch { throw new ProviderError('Model returned invalid JSON'); }

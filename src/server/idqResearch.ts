@@ -182,9 +182,18 @@ export async function runIdqProduct(input: IdqInput, mapping: IdqMapping, config
     if (functions) { delete base.response_format; base.tools = tools; base.tool_choice = 'auto'; base.parallel_tool_calls = false; }
     const response = await complete(base, execution, {
       taskLabel: 'IDQ', maxAttempts: 2, attempts: entry.attempts,
-      beforeAttempt: async attempt => { entry.attempts = attempt; await save(); },
-      onAttemptError: async (_attempt, error) => { entry.error = error.message; await save(); },
+      lastFailure: entry.lastFailure, lastReasoningEffort: entry.reasoningEffort,
+      beforeAttempt: async (attempt, request) => {
+        entry.attempts = attempt; entry.reasoningEffort = (request as typeof base).reasoning_effort; await save();
+      },
+      onAttemptError: async (_attempt, error) => {
+        entry.error = error.message; entry.lastFailure = { status: error.status, retryable: error.retryable }; await save();
+      },
     });
+    if (base.model === 'deepseek/deepseek-v4.1-flash' && base.reasoning_effort !== 'none' && entry.reasoningEffort === 'none') {
+      const notice = 'DeepSeek retried with thinking off after the requested reasoning level failed.';
+      if (!state.issues.includes(notice)) state.issues.push(notice);
+    }
     entry.response = response; await save(); return response;
   };
   const json = (response: any) => {

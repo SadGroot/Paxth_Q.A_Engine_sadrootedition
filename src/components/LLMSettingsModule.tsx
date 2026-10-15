@@ -24,7 +24,9 @@ export function LLMSettingsModule() {
         setTestResult({ modelName, purpose, status: 'testing' });
         let result: TestResult;
         try {
-          const response = await api<{ success?: boolean }>('/api/chat', { method: 'POST', body: JSON.stringify({ modelName, purpose }) });
+          const response = await api<{ success?: boolean }>('/api/chat', { method: 'POST', body: JSON.stringify({ modelName, purpose,
+            ...(modelName === 'deepseek/deepseek-v4.1-flash' && { deepseekReasoningEffort: draft.deepseekReasoningEffort }),
+          }) });
           if (response?.success !== true) throw new Error('The server returned an invalid connectivity test response.');
           result = { modelName, purpose, status: 'passed' };
         } catch (error) { result = { modelName, purpose, status: 'failed', error: (error as Error).message }; }
@@ -50,16 +52,17 @@ export function LLMSettingsModule() {
       <button className="border px-4 py-2" disabled={!draft.modelName.trim()} onClick={() => void act('qa')}>Test Q&A API</button>
       <label className="block">Scraping / Markdown model<input className="block border p-2 w-full" value={draft.scraperModelName} onChange={e => change('scraperModelName', e.target.value)} /></label>
       <button className="border px-4 py-2" disabled={!draft.scraperModelName.trim()} onClick={() => void act('scrape')}>Test Markdown model</button>
-      <p className="text-sm">URL cleanup tries your saved model first. On temporary model failures it can use GLM or DeepSeek as a backup, with the model used recorded in the evidence.</p>
-      <p className="text-sm">The limits and instructions below apply to QA/Catalog processing. Markdown conversion has its own fixed instructions and output limit.</p>
+      <p className="text-sm">URL cleanup tries your saved model first, then DeepSeek with thinking off if it fails. Temporary DeepSeek failures can retry with thinking off within the existing attempt limit.</p>
+      <p className="text-sm">DeepSeek reasoning applies to Q&A, Catalog, IDQ, and Markdown cleanup. The limits and instructions below apply to QA/Catalog processing; Markdown conversion has its own fixed instructions and output limit.</p>
       <div><label className="block" htmlFor="reasoning-level">Reasoning level</label><select id="reasoning-level" className="block border p-2 w-full" value={isDeepSeek ? draft.deepseekReasoningEffort : draft.reasoningEffort} onChange={e => change(isDeepSeek ? 'deepseekReasoningEffort' : 'reasoningEffort', e.target.value)} disabled={!isDeepSeek && !isGlm} aria-describedby="reasoning-help">
-        {isDeepSeek && <option value="auto">Auto (recommended)</option>}
+        {isDeepSeek && <option value="auto">Auto</option>}
         {isDeepSeek && <option value="none">Off</option>}
         <option value="low">{isDeepSeek ? 'Low' : 'Low (recommended)'}</option>
+        {isDeepSeek && <option value="medium">Medium (recommended)</option>}
         <option value="high">High</option>
         <option value="max">Max</option>
       </select></div>
-      <p id="reasoning-help" className="text-sm">{isDeepSeek ? 'Auto uses Off for Catalog and Low for Q&A. Explicit levels apply to both.' : isGlm ? 'Applies to GLM 5.3 Flash and FlashX for Q&A and Catalog. Low is recommended.' : 'No reasoning override for this model; provider defaults apply.'} High and Max can take longer and hit provider time limits.</p>
+      <p id="reasoning-help" className="text-sm">{isDeepSeek ? 'Medium is accepted by DeepSeek as an alias for High. Auto uses Low for Q&A and Off for Catalog, IDQ, and cleanup. Temporary failures can retry with thinking off.' : isGlm ? 'Applies to GLM 5.3 Flash and FlashX for Q&A and Catalog. Low is recommended.' : 'No reasoning override for this model; provider defaults apply.'} High and Max can take longer and hit provider time limits.</p>
       {([['temperature', 'Temperature', 0, 1, 0.1], ['maxTokens', 'Maximum output tokens', 1, 65536, 1], ['maxPageContentLength', 'Maximum evidence characters', 1, 200000, 1]] as const).map(([key, label, min, max, step]) => <label className="block" key={key}>{label}<input className="block border p-2" type="number" min={min} max={max} step={step} value={draft[key]} onChange={e => change(key, Number(e.target.value))} /></label>)}
       <label className="block">Shared QA / Catalog instructions<textarea className="block border p-2 w-full" rows={14} value={draft.qaAgentMemory} onChange={e => change('qaAgentMemory', e.target.value)} /></label>
       <button className="bg-black text-white px-4 py-2 mr-4" onClick={() => void act()}>Save changes</button>

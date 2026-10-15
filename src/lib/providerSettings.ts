@@ -8,7 +8,7 @@ export interface AppSettings {
   modelName: string;
   scraperModelName: string;
   reasoningEffort: 'low' | 'high' | 'max';
-  deepseekReasoningEffort: 'auto' | 'none' | 'low' | 'high' | 'max';
+  deepseekReasoningEffort: 'auto' | 'none' | 'low' | 'medium' | 'high' | 'max';
   temperature: number;
   maxTokens: number;
   maxConcurrency: number;
@@ -20,9 +20,9 @@ export interface AppSettings {
 export const DEFAULT_SETTINGS: AppSettings = {
   llmProvider: "openai-compatible", baseUrl: "", providerConfigured: false, scraperConfigured: false,
   modelName: "deepseek/deepseek-v4.1-flash", temperature: 0.1, maxTokens: 4096,
-  scraperModelName: "z-ai/glm-5.3-flash",
+  scraperModelName: "deepseek/deepseek-v4.1-flash",
   reasoningEffort: 'low',
-  deepseekReasoningEffort: 'auto',
+  deepseekReasoningEffort: 'medium',
   maxConcurrency: 1, maxRetries: 2,
   maxPageContentLength: 40_000, qaAgentMemory: DEFAULT_QA_AGENT_MEMORY,
 };
@@ -45,7 +45,7 @@ export function normalizeSettings(settings: Partial<AppSettings> = {}): AppSetti
       ? settings.scraperModelName.trim() : DEFAULT_SETTINGS.scraperModelName,
     reasoningEffort: settings.reasoningEffort === 'high' || settings.reasoningEffort === 'max'
       ? settings.reasoningEffort : DEFAULT_SETTINGS.reasoningEffort,
-    deepseekReasoningEffort: settings.deepseekReasoningEffort && ['auto', 'none', 'low', 'high', 'max'].includes(settings.deepseekReasoningEffort)
+    deepseekReasoningEffort: settings.deepseekReasoningEffort && ['auto', 'none', 'low', 'medium', 'high', 'max'].includes(settings.deepseekReasoningEffort)
       ? settings.deepseekReasoningEffort : DEFAULT_SETTINGS.deepseekReasoningEffort,
     temperature: typeof settings.temperature === "number" && settings.temperature >= 0 && settings.temperature <= 1
       ? settings.temperature : DEFAULT_SETTINGS.temperature,

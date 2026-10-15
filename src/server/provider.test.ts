@@ -32,6 +32,60 @@ try {
   assert.equal(calls,2,'Cleanup can reserve its third request for another model');
   const primary = { model: 'z-ai/glm-5.3-flash', messages: [{ role: 'user', content: 'Full unchanged evidence' }], max_tokens: 10000 };
   const backup = { ...primary, model: 'deepseek/deepseek-v4.1-flash', reasoning_effort: 'none' };
+  const medium = { ...backup, reasoning_effort: 'medium' };
+  const deepseekRequests: any[] = [];
+  for (const status of [500, 400, 422]) {
+    deepseekRequests.length = 0;
+    globalThis.fetch = async (_url, init) => {
+      deepseekRequests.push(JSON.parse(init!.body as string));
+      return deepseekRequests.length === 1
+        ? Response.json({ error: { message: 'Unsupported reasoning_effort: medium' } }, { status })
+        : Response.json({ ok: true });
+    };
+    const checkpoints: unknown[] = [];
+    assert.deepEqual(await completeQa(medium, AbortSignal.timeout(5000), {
+      maxAttempts: 2, beforeAttempt: async (_attempt, request) => { checkpoints.push(request); },
+    }), { ok: true });
+    assert.deepEqual(deepseekRequests, [medium, backup], 'A transient or explicit effort rejection disables thinking on the next attempt');
+    assert.deepEqual(checkpoints, deepseekRequests, 'Effort recovery is checkpointed before dispatch');
+  }
+  for (const status of [408, 500, 502, 503, 504, 529, 400, 422]) {
+    deepseekRequests.length = 0;
+    globalThis.fetch = async (_url, init) => { deepseekRequests.push(JSON.parse(init!.body as string)); return Response.json({ ok: true }); };
+    await completeQa(medium, AbortSignal.timeout(2000), { attempts: 1, maxAttempts: 2, lastFailure: { status, retryable: true } });
+    assert.deepEqual(deepseekRequests, [backup], 'Restart recovery uses the remaining non-thinking attempt');
+  }
+  for (const lastFailure of [undefined, { status: 429, retryable: true }, { status: 502, retryable: false }]) {
+    deepseekRequests.length = 0;
+    await completeQa(medium, AbortSignal.timeout(2000), { attempts: 1, maxAttempts: 2, lastFailure });
+    assert.deepEqual(deepseekRequests, [medium], 'Rate limits and unclassified or permanent failures retain the requested effort');
+  }
+  deepseekRequests.length = 0;
+  await completeQa(medium, AbortSignal.timeout(2000), {
+    attempts: 2, lastReasoningEffort: 'none', lastFailure: { status: 429, retryable: true },
+  });
+  assert.deepEqual(deepseekRequests, [backup], 'A rate limit after switching Off never re-enables thinking on restart');
+  for (const status of [400, 401, 402, 403, 422]) {
+    deepseekRequests.length = 0;
+    globalThis.fetch = async (_url, init) => { deepseekRequests.push(JSON.parse(init!.body as string)); return Response.json({ error: 'Invalid tools' }, { status }); };
+    await assert.rejects(completeQa(medium, AbortSignal.timeout(2000)), /HTTP/);
+    assert.deepEqual(deepseekRequests, [medium], 'Unrelated validation, authentication and billing failures stop immediately');
+  }
+  deepseekRequests.length = 0;
+  globalThis.fetch = async (_url, init) => {
+    deepseekRequests.push(JSON.parse(init!.body as string));
+    if (deepseekRequests.length === 1) throw new TypeError('network failure');
+    return Response.json({ ok: true });
+  };
+  await completeQa(medium, AbortSignal.timeout(5000));
+  assert.deepEqual(deepseekRequests, [medium, backup], 'Network failures use the same bounded effort recovery');
+  const cancelled = new AbortController();
+  let cancelledCalls = 0;
+  globalThis.fetch = async () => { cancelledCalls++; return Response.json({}, { status: 500 }); };
+  await assert.rejects(completeQa(medium, cancelled.signal, { onAttemptError: async () => { cancelled.abort(); } }));
+  assert.equal(cancelledCalls, 1, 'Cancellation prevents a fallback request');
+  await assert.rejects(completeQa(medium, AbortSignal.timeout(2000), { attempts: 2, maxAttempts: 2 }), /budget|interrupted/);
+  assert.equal(cancelledCalls, 1, 'An exhausted two-attempt workflow cannot dispatch a third request');
   const routed: any[] = [], dispatched: Array<{ attempt: number; payload: unknown }> = [];
   globalThis.fetch=async(_url,init)=>{
     routed.push(JSON.parse(init!.body as string));
@@ -159,10 +213,10 @@ try {
   for (const reasoningEffort of ['low', 'high', 'max']) {
     assert.equal(validateSettings({ ...editableSettings(DEFAULT_SETTINGS), reasoningEffort }).reasoningEffort, reasoningEffort);
   }
-  for (const deepseekReasoningEffort of ['auto', 'none', 'low', 'high', 'max']) {
+  for (const deepseekReasoningEffort of ['auto', 'none', 'low', 'medium', 'high', 'max']) {
     assert.equal(validateSettings({ ...editableSettings(DEFAULT_SETTINGS), deepseekReasoningEffort }).deepseekReasoningEffort, deepseekReasoningEffort);
   }
-  for (const deepseekReasoningEffort of [null, 'medium', 'LOW', '', 1, {}, []]) {
+  for (const deepseekReasoningEffort of [null, 'LOW', '', 1, {}, []]) {
     assert.throws(() => validateSettings({ ...editableSettings(DEFAULT_SETTINGS), deepseekReasoningEffort }), /Invalid/);
   }
   for (const reasoningEffort of [null, 'none', 'medium', 'LOW', '', 1, {}, []]) {
@@ -170,7 +224,7 @@ try {
   }
   const { reasoningEffort: _reasoningEffort, deepseekReasoningEffort: _deepseekReasoningEffort, ...legacySettings } = editableSettings(DEFAULT_SETTINGS);
   assert.equal(validateSettings(legacySettings).reasoningEffort, 'low', 'Older API clients can omit the new setting');
-  assert.equal(validateSettings(legacySettings).deepseekReasoningEffort, 'auto');
+  assert.equal(validateSettings(legacySettings).deepseekReasoningEffort, 'medium');
   for (const retired of ['scrapperModelName', 'navigationModelInitialized', 'scraperTimeout']) {
     assert.throws(() => validateSettings({ ...editableSettings(DEFAULT_SETTINGS), [retired]: 'retired' }), /Invalid/);
   }
@@ -206,6 +260,10 @@ try {
     assert.doesNotMatch(JSON.stringify(payloads),/test-only|Must never|qa_status|sku/);
     assert.equal((await request({})).body.purpose,'qa');
     assert.equal(payloads[1].model,DEFAULT_SETTINGS.modelName);
+    assert.equal(payloads[1].reasoning_effort, 'medium');
+    assert.equal((await request({ modelName: DEFAULT_SETTINGS.modelName, deepseekReasoningEffort: 'none' })).status, 200);
+    assert.equal(payloads.at(-1).reasoning_effort, 'none', 'Connectivity tests use the displayed effort without saving');
+    assert.equal((await request({ deepseekReasoningEffort: 'invalid' })).status, 400);
     settingsUnavailable=true;
     assert.equal((await request({ purpose: 'qa', modelName: 'draft/qa' })).status, 200);
     assert.equal(settingsReads, 1, 'Explicit model tests still work during a settings outage');

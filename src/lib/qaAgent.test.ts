@@ -38,7 +38,7 @@ const requestSettings = normalizeSettings({
 const request = buildQaRequest({ ...requestSettings, baseUrl: "https://aicredits.in/v1/chat/completions" }, input);
 assert.deepEqual(request, {
   payload: { model: "deepseek/deepseek-v4.1-flash", temperature: 0.3, max_tokens: 10000,
-    reasoning_effort: "low",
+    reasoning_effort: "medium",
     response_format: { type: "json_object" }, messages: input.messages },
 });
 assert.equal(normalizeSettings().modelName, "deepseek/deepseek-v4.1-flash");
@@ -49,9 +49,11 @@ for (const model of ["deepseek/deepseek-v4-flash", "deepseek/deepseek-v4.1-flash
   }, "Unrecognized QA models receive no model-specific reasoning control");
 }
 assert.deepEqual(buildQaRequest(requestSettings, input, 'catalog').payload, {
-  ...request.payload, reasoning_effort: 'none',
-}, 'DeepSeek Catalog retains its existing non-thinking request');
-for (const deepseekReasoningEffort of ['none', 'low', 'high', 'max'] as const) {
+  ...request.payload, reasoning_effort: 'medium',
+}, 'DeepSeek Catalog uses the selected medium effort');
+assert.equal(buildQaRequest({ ...requestSettings, deepseekReasoningEffort: 'auto' }, input, 'catalog').payload.reasoning_effort, 'none');
+assert.equal(buildQaRequest({ ...requestSettings, deepseekReasoningEffort: 'auto' }, input).payload.reasoning_effort, 'low');
+for (const deepseekReasoningEffort of ['none', 'low', 'medium', 'high', 'max'] as const) {
   for (const mode of ['qa', 'catalog'] as const) {
     assert.deepEqual(buildQaRequest({ ...requestSettings, deepseekReasoningEffort }, input, mode).payload, {
       ...request.payload, reasoning_effort: deepseekReasoningEffort,

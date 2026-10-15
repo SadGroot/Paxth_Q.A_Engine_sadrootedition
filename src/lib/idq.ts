@@ -22,7 +22,7 @@ export type IdqProgress = {
   baseline?: IdqBaseline; sources: IdqSource[];
   searches: Array<{ query: string; results?: Array<{ title: string; url: string; snippet: string }>; error?: string }>;
   reads: Array<{ url: string; error?: string }>; messages?: any[];
-  calls: Record<string, { attempts: number; response?: any; error?: string }>;
+  calls: Record<string, { attempts: number; response?: any; error?: string; reasoningEffort?: string; lastFailure?: { status: number; retryable: boolean } }>;
   imageChecked?: boolean; issues: string[]; stage?: string; result?: IdqResult;
 };
 export const emptyIdqProgress = (): IdqProgress => ({ sources: [], searches: [], reads: [], calls: {}, issues: [] });

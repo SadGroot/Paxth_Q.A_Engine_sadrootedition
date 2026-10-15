@@ -53,14 +53,17 @@ const provider=createServer(async(req,res)=>{
     conversionRequests.push(payload);
     const evidence=JSON.parse(payload.messages[1].content);
     res.setHeader('Content-Type','application/json');
-    if(conversionUnavailable && payload.model===DEFAULT_SETTINGS.scraperModelName){res.writeHead(500);res.end('{}');return;}
+    if(conversionUnavailable && payload.reasoning_effort!=='none'){res.writeHead(500);res.end('{}');return;}
     if(conversionFailed){res.end(JSON.stringify({choices:[{finish_reason:'length',message:{content:'Incomplete conversion'}}]}));return;}
-    if(conversionMalformedPrimary && payload.model===DEFAULT_SETTINGS.scraperModelName){res.end(JSON.stringify({choices:[{finish_reason:'stop',message:{content:evidence.content}}]}));return;}
+    if(conversionMalformedPrimary && payload.reasoning_effort!=='none'){res.end(JSON.stringify({choices:[{finish_reason:'stop',message:{content:evidence.content}}]}));return;}
     res.end(JSON.stringify({choices:[{finish_reason:'stop',message:{content:JSON.stringify({markdown:evidence.content,
       selectedGalleryIds:conversionInvalidGallery?['unknown-gallery']:evidence.imageGalleries.map((gallery:any)=>gallery.id)})}}]}));return;
   }
   providerRequests.push(payload);
   calls++;
+  if(providerMode==='deepseek-thinking-outage' && payload.model===DEFAULT_SETTINGS.modelName && payload.reasoning_effort!=='none') {
+    res.writeHead(500);res.end('{}');return;
+  }
   if(providerMode==='wait') await delay(1200);
   if(providerMode==='permanent'){res.writeHead(400);res.end('{}');return;}
   if(providerMode==='retryable') {
@@ -258,7 +261,7 @@ try {
   const fallbackSaved=await request('/api/catalog/fallback-check/scrape','POST',{expectedRevision:0},user);
   assert.equal(fallbackSaved.status,200);assert.equal(fallbackSaved.body.revision,1);
   assert.equal(scrapeRequests.length,beforeFallbackCollection+1,'A saved fallback makes one collection');
-  assert.equal(fallbackSaved.body.scrape_metadata.modelName,'z-ai/glm-5.3-flashx');
+  assert.equal(fallbackSaved.body.scrape_metadata.modelName,DEFAULT_SETTINGS.modelName);
   conversionFailed=true;
   const fallbackFailed=await request('/api/catalog/fallback-check/scrape','POST',{expectedRevision:1},user);
   conversionUnavailable=false;conversionFailed=false;
@@ -274,9 +277,9 @@ try {
   conversionMalformedPrimary=false;
   assert.equal(jsonRecovered.status,200);assert.equal(jsonRecovered.body.revision,1);
   assert.equal(scrapeRequests.length,beforeJsonCollection+1,'Invalid JSON recovery reuses the collected page');
-  assert.deepEqual(conversionRequests.slice(beforeJsonConversion).map(payload=>payload.model),[DEFAULT_SETTINGS.scraperModelName,'z-ai/glm-5.3-flashx']);
+  assert.deepEqual(conversionRequests.slice(beforeJsonConversion).map(payload=>payload.model),[DEFAULT_SETTINGS.scraperModelName,DEFAULT_SETTINGS.modelName]);
   assert.ok(conversionRequests.slice(beforeJsonConversion).every(payload=>payload.response_format?.type==='json_object'));
-  assert.equal(jsonRecovered.body.scrape_metadata.modelName,'z-ai/glm-5.3-flashx');
+  assert.equal(jsonRecovered.body.scrape_metadata.modelName,DEFAULT_SETTINGS.modelName);
   assert.match(jsonRecovered.body.scraped_markdown,/https:\/\/cdn\.example\.com\/product\.jpg\?w=2000/);
   assert.equal((await getProviderSettings(pool)).scraperModelName,DEFAULT_SETTINGS.scraperModelName,'Recovery does not change the saved model choice');
   await pool.query("DELETE FROM sku_data WHERE sku='json-recovery-check'");
@@ -444,7 +447,7 @@ try {
   assert.equal(conversionRequests.at(-1).model,DEFAULT_SETTINGS.scraperModelName);
   assert.doesNotMatch(JSON.stringify(conversionRequests.at(-1)),/test-secret-only|SAP takes precedence/);
   const qaRequest=providerRequests[offset];
-  assert.equal(qaRequest.reasoning_effort,'low');assert.equal(qaRequest.max_tokens,10000);
+  assert.equal(qaRequest.reasoning_effort,'medium');assert.equal(qaRequest.max_tokens,10000);
   assert.deepEqual(qaRequest.response_format,{type:'json_object'});assert.ok(qaRequest.messages[0].content.includes(mappingRules));
   assert.match(qaRequest.messages[0].content,/SAP takes precedence/);
   const qaData=JSON.parse(qaRequest.messages[1].content);
@@ -457,6 +460,21 @@ try {
   assert.equal(webHistory.items[1].error,null);assert.equal(webHistory.items[1].result.qa_result.qa_status,'pass');
   assert.deepEqual(webHistory.items[1].result.qa_result.source_notes,{sap_used:true,url_used:true,source_conflicts:[]});
   assert.match((await request('/api/catalog','GET',undefined,user)).body.find((row:any)=>row.sku==='b').scraped_markdown,/variant=42/);
+  const priorSettings = editableSettings((await request('/api/provider-settings','GET',undefined,admin)).body);
+  await request('/api/provider-settings','PUT',{...priorSettings,modelName:DEFAULT_SETTINGS.modelName,deepseekReasoningEffort:'medium'},admin);
+  providerMode='deepseek-thinking-outage';
+  const effortOffset=providerRequests.length;
+  const effortRun=await request('/api/jobs/job/runs','POST',{requestId:randomUUID(),mode:'single',sku:'b'},user);
+  stopWorker=startJobWorker(pool,scrape);
+  await waitFor(async()=>(await request(`/api/job-runs/${effortRun.body.id}`,'GET',undefined,user)).body.status==='completed','QA effort recovery');
+  await stopWorker();stopWorker=undefined;
+  assert.deepEqual(providerRequests.slice(effortOffset).map(payload=>payload.reasoning_effort),['medium','none']);
+  const effortHistory=(await request(`/api/job-runs/${effortRun.body.id}`,'GET',undefined,user)).body;
+  assert.match(effortHistory.items.find((item:any)=>item.sku==='b').result.qa_result.summary,/thinking off/);
+  const effortState=(await pool.query("SELECT provider_state FROM job_run_items WHERE run_id=$1 AND sku='b'",[effortRun.body.id])).rows[0].provider_state;
+  assert.deepEqual(effortState,{modelName:DEFAULT_SETTINGS.modelName,reasoningEffort:'none',lastFailure:{status:500,retryable:true}});
+  providerMode='success';
+  await request('/api/provider-settings','PUT',priorSettings,admin);
   // Old job snapshots still retrieve with the cloud without rewriting stored configuration.
   await pool.query("UPDATE sku_data SET scraped_markdown=NULL,scrape_status=NULL WHERE sku='b'");
   const legacyRun=await request('/api/jobs/job/runs','POST',{requestId:randomUUID(),mode:'single',sku:'b'},user);
@@ -646,7 +664,7 @@ try {
   assert.ok(providerRequests.slice(catalogOffset).every(payload=>!payload.messages[0].content.includes(laterMemory)),'Global edits do not change an admitted run');
   assert.deepEqual(await unchangedQa(),beforeCatalog,'Catalog commits never overwrite QA state or original upload data');
   assert.equal((await pool.query("SELECT status FROM jobs WHERE id='catalog-job'")).rows[0].status,'completed');
-  assert.ok(providerRequests.slice(catalogOffset).every(payload=>payload.reasoning_effort==='none'),'DeepSeek Catalog disables thinking while QA retains low effort');
+  assert.ok(providerRequests.slice(catalogOffset).every(payload=>payload.reasoning_effort==='medium'),'DeepSeek Catalog uses the saved medium effort');
   for(const item of generatedCatalog.items) {
     assert.equal(item.result.catalog_state.row.attributes__lulu_ean,'0001234567890');
     assert.equal(item.result.catalog_state.row.attributes__Shipping_Attribute,'001');
@@ -896,6 +914,21 @@ try {
   assert.deepEqual(threeCompleted.items[2].result.catalog_state.headers,phoneHeaders);
   assert.equal(threeCompleted.catalogOutputs.shipping.rows.length,3);
   assert.ok(threeCompleted.items.every((item:any)=>Array.isArray(item.result.catalog_state.cellWarnings)));
+  await request('/api/provider-settings','PUT',{...configured,deepseekReasoningEffort:'medium'},admin);
+  providerMode='deepseek-thinking-outage';
+  for (const recovering of [false,true]) {
+    const effortRun=await startCatalog('single','three-phone',threeJob.id);
+    if(recovering) await pool.query("UPDATE job_run_items SET status='running',attempts=1,started_at=now(),provider_state=$2 WHERE run_id=$1 AND sku='three-phone'",
+      [effortRun.body.id,JSON.stringify({modelName:configured.modelName,reasoningEffort:'medium',lastFailure:{status:500,retryable:true}})]);
+    const effortOffset=providerRequests.length;
+    stopWorker=startJobWorker(pool,scrape);
+    await waitFor(async()=>(await catalogRun(effortRun.body.id)).status==='completed','Catalog effort recovery');
+    await stopWorker();stopWorker=undefined;
+    assert.deepEqual(providerRequests.slice(effortOffset).map(payload=>payload.reasoning_effort),recovering?['none']:['medium','none']);
+    const item=(await catalogRun(effortRun.body.id)).items.find((item:any)=>item.sku==='three-phone');
+    assert.equal(item.attempts,2);
+    assert.ok(item.result.catalog_state.warnings.some((warning:string)=>warning.includes('thinking off')));
+  }
   for (const modelName of ['z-ai/glm-5.3-flash', 'z-ai/glm-5.3-flashx']) {
     await request('/api/provider-settings','PUT',{...configured,modelName,deepseekReasoningEffort:'max'},admin);
     providerMode='catalog-glm-outage';
@@ -912,7 +945,7 @@ try {
     assert.equal(item.attempts,3);assert.equal(item.result.catalog_state.modelName,configured.modelName);
     assert.ok(item.result.catalog_state.warnings.some((warning:string)=>warning.includes(configured.modelName)));
     const state=(await pool.query("SELECT provider_state FROM job_run_items WHERE run_id=$1 AND sku='three-phone'",[fallbackRun.body.id])).rows[0].provider_state;
-    assert.deepEqual(state,{modelName:configured.modelName,lastFailure:{status:500,retryable:true}});
+    assert.deepEqual(state,{modelName:configured.modelName,reasoningEffort:'none',lastFailure:{status:500,retryable:true}});
   }
   const resumedCatalog=await startCatalog('single','three-phone',threeJob.id);
   await pool.query("UPDATE job_run_items SET status='running',attempts=2,started_at=now(),provider_state=$2 WHERE run_id=$1 AND sku='three-phone'",
