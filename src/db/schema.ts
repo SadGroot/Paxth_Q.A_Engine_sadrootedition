@@ -20,6 +20,7 @@ export const attributeSets = pgTable('attribute_sets', {
   name: text('name').notNull(),
   rulesMarkdown: text('rules_markdown').notNull(),
   catalogHeaders: jsonb('catalog_headers').$type<string[]>().notNull().default([]),
+  catalogHeaderRequirements: jsonb('catalog_header_requirements').$type<Record<string, 'mandatory' | 'optional'>>().notNull().default({}),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 }, (table) => [uniqueIndex('attribute_sets_normalized_name_idx').on(sql`lower(btrim(${table.name}))`)]);
@@ -113,3 +114,15 @@ export const jobRunItems = pgTable('job_run_items', {
   selectedImageUrls:jsonb('selected_image_urls').$type<string[]>().notNull().default([]),
   startedAt:timestamp('started_at',{withTimezone:true}),finishedAt:timestamp('finished_at',{withTimezone:true}),result:jsonb('result'),error:text('error'),
 },table=>[primaryKey({columns:[table.runId,table.sku]}),check('job_run_items_status_check',sql`${table.status} IN ('queued','running','completed','failed','cancelled','skipped')`),check('job_run_items_attempts_check',sql`${table.attempts} BETWEEN 0 AND 3`)]);
+
+export const idqJobs = pgTable('idq_jobs', {
+  id:text('id').primaryKey(),requestId:text('request_id').notNull(),actorId:text('actor_id').notNull(),actorName:text('actor_name').notNull(),
+  name:text('name').notNull(),status:text('status').notNull().default('queued'),configuration:jsonb('configuration').notNull(),ownerToken:text('owner_token'),
+  createdAt:timestamp('created_at',{withTimezone:true}).notNull().defaultNow(),startedAt:timestamp('started_at',{withTimezone:true}),finishedAt:timestamp('finished_at',{withTimezone:true}),error:text('error'),
+},table=>[uniqueIndex('idq_jobs_actor_id_request_id_key').on(table.actorId,table.requestId),
+  check('idq_jobs_status_check',sql`${table.status} IN ('queued','running','cancelling','cancelled','completed','needs_review','failed')`)]);
+export const idqItems = pgTable('idq_items', {
+  jobId:text('job_id').notNull().references(()=>idqJobs.id,{onDelete:'cascade'}),position:integer('position').notNull(),input:jsonb('input').notNull(),
+  progress:jsonb('progress').notNull().default({}),result:jsonb('result'),status:text('status').notNull().default('queued'),
+  startedAt:timestamp('started_at',{withTimezone:true}),finishedAt:timestamp('finished_at',{withTimezone:true}),error:text('error'),
+},table=>[primaryKey({columns:[table.jobId,table.position]}),check('idq_items_status_check',sql`${table.status} IN ('queued','running','cancelled','completed','needs_review','failed')`)]);

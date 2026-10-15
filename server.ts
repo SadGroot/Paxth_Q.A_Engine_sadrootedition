@@ -13,6 +13,7 @@ import { collectProductPage } from "./src/server/scrapePipeline.js";
 import { initializeJobRuns, registerJobRunRoutes, startJobWorker } from "./src/server/jobRunner.js";
 import { registerScrapeRoutes } from "./src/server/scraper.js";
 import { registerJobImageRoutes } from "./src/server/jobImages.js";
+import { initializeIdq, registerIdqRoutes, startIdqWorker } from './src/server/idqJobs.js';
 
 async function startServer() {
   if (!pool || !db) throw new Error("DATABASE_URL is required");
@@ -21,6 +22,7 @@ async function startServer() {
   await initializeAuth(pool);
   await initializeProvider(pool);
   await initializeJobRuns(pool);
+  await initializeIdq(pool);
   await verifySchema(pool);
   const app = express();
   const listener = createHttpServer(app);
@@ -42,6 +44,7 @@ async function startServer() {
   registerProviderRoutes(app,pool);
   registerJobRunRoutes(app,pool);
   registerJobImageRoutes(app,pool);
+  registerIdqRoutes(app,pool);
   app.use('/api', (_req,res) => { res.status(404).json({error:'Endpoint not found'}); });
   app.use((error: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
     const known = error instanceof ApiError || error instanceof ProviderError;
@@ -75,12 +78,13 @@ async function startServer() {
     console.log(`Server running on http://localhost:${PORT}`);
   });
   const stopWorker = startJobWorker(pool);
+  const stopIdqWorker = startIdqWorker(pool);
   let stopping = false;
   const shutdown = async () => {
     if (stopping) return;
     stopping = true;
     listener.close();
-    await stopWorker();
+    await Promise.all([stopWorker(), stopIdqWorker()]);
     await vite?.close();
     await pool.end();
   };

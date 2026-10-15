@@ -21,6 +21,7 @@ export function AttributeSetEditor({ initialData, onSave, onCancel, onDelete, er
   const [activeTab, setActiveTab] = useState<"edit" | "preview">("edit");
   const [section, setSection] = useState<'rules' | 'headers'>('rules');
   const [headersText, setHeadersText] = useState(initialData?.catalogHeaders?.join('\n') || '');
+  const [requirements, setRequirements] = useState(initialData?.catalogHeaderRequirements || {});
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
 
@@ -28,6 +29,7 @@ export function AttributeSetEditor({ initialData, onSave, onCancel, onDelete, er
     setName(initialData?.name || "");
     setRulesMarkdown(initialData?.rulesMarkdown || "");
     setHeadersText(initialData?.catalogHeaders?.join('\n') || '');
+    setRequirements(initialData?.catalogHeaderRequirements || {});
     setSection('rules');
     setActiveTab('edit');
     setShowDeleteConfirm(false);
@@ -52,6 +54,7 @@ export function AttributeSetEditor({ initialData, onSave, onCancel, onDelete, er
       name: name.trim(),
       rulesMarkdown,
       catalogHeaders,
+      catalogHeaderRequirements: Object.fromEntries(catalogHeaders.filter(h => Object.hasOwn(requirements, h)).map(h => [h, requirements[h]])),
     });
   };
 
@@ -163,12 +166,26 @@ export function AttributeSetEditor({ initialData, onSave, onCancel, onDelete, er
                {section === 'headers' ? <>
                  <p id="catalog-headers-help" className="text-sm text-[#8C8882] mb-4">
                    One exact output header per line, in export order. Include sku, base_code, attributes__lulu_ean, attributes__shipping_weight,
-                   attributes__brand, and attributes__lulu_product_type. Leave empty for a QA-only set. This list controls Catalog output only; upload requirements stay fixed.
+                   attributes__brand, and attributes__lulu_product_type. Leave empty for a QA-only set. Classify each header below before using IDQ; QA and Catalog upload requirements stay fixed.
                  </p>
                  <textarea aria-label="Catalog output headers" aria-describedby="catalog-headers-help" value={headersText} readOnly={readOnly}
                    onChange={event => { setHeadersText(event.target.value); setLocalError(null); }}
-                   className="w-full flex-1 resize-none border-0 bg-transparent text-sm leading-relaxed text-[#4A4A4A] focus:ring-0 p-0 font-mono"
+                   rows={8} className="w-full shrink-0 resize-y border border-[#E5E2DE] text-sm leading-relaxed text-[#4A4A4A] p-2 font-mono"
                    placeholder="sku&#10;base_code&#10;attributes__lulu_ean&#10;attributes__shipping_weight&#10;attributes__brand&#10;attributes__lulu_product_type&#10;name" />
+                 <div className="mt-4">
+                   <p className="text-sm mb-2">IDQ header requirements</p>
+                   <button type="button" disabled={readOnly} className="text-sm underline mb-3" onClick={() => setRequirements(current => ({
+                     ...current, ...Object.fromEntries(headersText.split(/\r?\n/).filter(h => h.trim() && !Object.hasOwn(current, h)).map(h => [h, 'optional' as const])),
+                   }))}>Set unclassified headers to Optional</button>
+                   {[...new Set(headersText.split(/\r?\n/).filter(h => h.trim()))].map((header, index) => <div key={header} className="flex justify-between items-center gap-4 border-t border-[#E5E2DE] py-2 text-sm">
+                     <label htmlFor={`idq-requirement-${index}`} className="font-mono break-all">{header}</label>
+                     <select id={`idq-requirement-${index}`} value={Object.hasOwn(requirements, header) ? requirements[header] : ''} disabled={readOnly}
+                       onChange={event => setRequirements(current => { if (event.target.value) return { ...current, [header]: event.target.value as 'mandatory' | 'optional' }; const next = { ...current }; delete next[header]; return next; })}
+                       className="border border-[#E5E2DE] p-2 bg-white">
+                       <option value="">Unclassified</option><option value="mandatory">Mandatory</option><option value="optional">Optional</option>
+                     </select>
+                   </div>)}
+                 </div>
                </> : activeTab === "edit" ? (
                  <textarea
                    aria-label="Mapping rules"

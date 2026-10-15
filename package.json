@@ -10,6 +10,7 @@
     "preview": "vite preview --outDir dist/public",
     "clean": "rm -rf dist",
     "lint": "tsc --noEmit",
+    "agents:verify": "node scripts/verify-agency-agents.mjs",
     "test:job-state": "tsx src/lib/jobRunState.test.ts",
     "test:llm-response": "tsx src/lib/llmResponse.test.ts",
     "test:qa-agent": "tsx src/hooks/useSettings.test.ts && tsx src/lib/qaAgent.test.ts",
@@ -28,11 +29,15 @@
     "test:catalog-browser": "tsx src/components/CatalogMode.test.ts",
     "test:catalog-images": "tsx src/lib/catalogImages.test.ts && tsx src/server/jobImages.test.ts",
     "test:catalog-images-browser": "tsx src/components/CatalogImages.test.ts",
-    "test": "npm run lint && npm run test:auth && npm run test:provider && npm run test:catalog && npm run test:catalog-generation && npm run test:catalog-images && npm run test:job-state && npm run test:job-runner && npm run test:llm-response && npm run test:qa-agent && npm run test:scraper",
+    "test": "npm run lint && npm run test:auth && npm run test:provider && npm run test:catalog && npm run test:catalog-generation && npm run test:catalog-images && npm run test:job-state && npm run test:job-runner && npm run test:llm-response && npm run test:qa-agent && npm run test:scraper && npm run test:idq",
     "test:job-runner": "tsx src/server/jobRunner.test.ts",
     "setup:browser": "playwright-core install chromium",
     "test:scrape-production": "node scripts/smoke-scraper.mjs",
-    "test:scrape-live": "tsx scripts/test-live-scraper.ts"
+    "test:scrape-live": "tsx scripts/test-live-scraper.ts",
+    "test:idq": "tsx src/lib/idq.test.ts && tsx src/server/idqResearch.test.ts",
+    "test:idq-db": "tsx src/server/idqJobs.test.ts",
+    "test:idq-browser": "tsx src/components/IDQModule.test.ts",
+    "test:idq-live": "tsx scripts/test-live-idq.ts"
   },
   "dependencies": {
     "@tailwindcss/typography": "^0.5.20",

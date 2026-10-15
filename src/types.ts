@@ -24,6 +24,7 @@ export interface AttributeSet {
   name: string;
   rulesMarkdown: string;
   catalogHeaders: string[];
+  catalogHeaderRequirements?: Record<string, 'mandatory' | 'optional'>;
   createdAt: number;
   updatedAt: number;
 }

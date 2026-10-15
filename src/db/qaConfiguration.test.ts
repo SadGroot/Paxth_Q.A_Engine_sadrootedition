@@ -62,6 +62,15 @@ try {
   assert.deepEqual(created.body.catalogHeaders, []);
   const configured = await request(`attribute-sets/${created.body.id}`, 'PUT', { name: 'Integration Product', rulesMarkdown: 'Saved rules', catalogHeaders: headers });
   assert.deepEqual(configured.body.catalogHeaders, headers);
+  assert.deepEqual(configured.body.catalogHeaderRequirements, {});
+  const classified = await request(`attribute-sets/${created.body.id}`, 'PUT', { name: 'Integration Product', rulesMarkdown: 'Saved rules', catalogHeaderRequirements: { name: 'mandatory' } });
+  assert.equal(classified.body.catalogHeaderRequirements.name, 'mandatory');
+  for (const requirements of [null, [], { name: 'required' }, { unknown: 'optional' }]) {
+    assert.equal((await request(`attribute-sets/${created.body.id}`, 'PUT', { name: 'Integration Product', rulesMarkdown: 'Saved rules', catalogHeaderRequirements: requirements })).status, 400);
+  }
+  const preserved = await request(`attribute-sets/${created.body.id}`, 'PUT', { name: 'Integration Product', rulesMarkdown: 'Saved rules' });
+  assert.equal(preserved.body.catalogHeaderRequirements.name, 'mandatory', 'Older QA clients preserve IDQ classifications');
+
   for (const invalid of [null, 'sku', ['sku'], legacyHeaders, [...headers, 'attributes__product_type'], [...headers, 'name'], [...headers, ''], [...headers, ' padded'], [...headers, 5]]) {
     assert.equal((await request(`attribute-sets/${created.body.id}`, 'PUT', { name: 'Integration Product', rulesMarkdown: 'Must not save', catalogHeaders: invalid })).status, 400);
     assert.equal((await request('attribute-sets', 'POST', { name: 'Invalid headers', rulesMarkdown: 'Rules', catalogHeaders: invalid })).status, 400);

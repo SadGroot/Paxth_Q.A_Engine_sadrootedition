@@ -17,8 +17,9 @@ import { AppProvider, useAppContext } from './context/AppContext';
 import { cn } from './lib/utils';
 import { Shield } from 'lucide-react';
 import { api } from './lib/api';
+import { IDQModule } from './components/IDQModule';
 
-type ModuleType = 'dashboard' | 'scraper' | 'attribute-sets' | 'jobs' | 'llm-settings' | 'users';
+type ModuleType = 'dashboard' | 'scraper' | 'attribute-sets' | 'jobs' | 'idq' | 'llm-settings' | 'users';
 
 function MainLayout() {
   const { user, sessionLoading, workspaceMode, setWorkspaceMode } = useAppContext();
@@ -63,6 +64,7 @@ function MainLayout() {
     { id: 'scraper', label: 'Scraper' },
     { id: 'attribute-sets', label: 'Attribute Sets' },
     { id: 'jobs', label: 'Jobs' },
+    { id: 'idq', label: 'IDQ' },
     ...(isSystemAdmin ? [{ id: 'llm-settings', label: 'LLM Settings', adminOnly: true }] : []),
     ...(isSystemAdmin ? [{ id: 'users', label: 'Users', adminOnly: true }] : []),
   ];
@@ -124,6 +126,7 @@ function MainLayout() {
         {activeModule === 'scraper' && <ScraperModule />}
         {activeModule === 'attribute-sets' && <AttributeSetsModule />}
         {activeModule === 'jobs' && <JobsModule initialJobId={createdCatalogJobId} />}
+        {activeModule === 'idq' && <IDQModule />}
         {activeModule === 'llm-settings' && isSystemAdmin && <LLMSettingsModule />}
         {activeModule === 'users' && isSystemAdmin && <UsersModule />}
       </main>

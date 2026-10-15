@@ -49,7 +49,7 @@ export function validateSettings(value: any) {
   return editableSettings(normalizeSettings(value));
 }
 export async function completeQa(payload: unknown, signal: AbortSignal, options: {
-  taskLabel?: 'QA' | 'Catalog' | 'Scraping';
+  taskLabel?: 'QA' | 'Catalog' | 'Scraping' | 'IDQ';
   maxAttempts?: 1 | 2 | 3;
   attempts?: number; beforeAttempt?: (attempt: number, payload: unknown) => Promise<void>;
   lastError?: string | null; onAttemptError?: (attempt: number, error: ProviderError) => Promise<void>;

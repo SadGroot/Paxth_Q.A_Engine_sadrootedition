@@ -374,7 +374,7 @@ Use **Mapping Rules** for the Markdown shared by QA and Catalog. A header sectio
 ```markdown
 # Example USB Hub Catalog
 
-## Cell rules
+## Cell ruless
 
 - The six pass-through values always remain unchanged, including blanks.
 - `name`: use source-supported brand and model. Example format: `ExampleBrand Model X USB Hub`.
@@ -392,7 +392,7 @@ Dashboard, Scraper URL previews, and durable QA/Catalog jobs share this pipeline
 
 `public URL → Crawl4AI cloud API → GLM Markdown cleanup → product evidence`
 
-Set server-only `CRAWL4AI_API_KEY` and model credentials (`AICREDITS_API_KEY`, or the complete `LLM_BASE_URL`/`LLM_API_KEY` pair). Both configurations are checked before collection. The cloud request follows the [official API reference](https://api.crawl4ai.com/llms.txt): one Bearer-authenticated `POST https://api.crawl4ai.com/scrape` with `{url, format: "both", parse: {media: true}}` to collect Markdown, HTML, and parsed image media together. Proxy and region use the service defaults. There is no local fallback or automatic cloud retry.
+Set server-only `CRAWL4AI_API_KEY` and model credentials (`AICREDITS_API_KEY`, or the complete `LLM_BASE_URL`/`LLM_API_KEY` pair). Both configurations are checked before collection. The cloud request follows the [official API reference](https://api.crawl4ai.com/llms.txt): one Bearer-authenticated `POST https://api.crawl4ai.com/scrape` with `{url, format: "both", parse: {media: true}}` to collect Markdown, HTML, and parsed image media together. Proxy and region use the service defaults.. There is no local fallback or automatic cloud retry.
 
 The existing `scraperModelName` defaults to `z-ai/glm-5.3-flash`, independently of QA. Cleanup removes navigation, cookie banners, unrelated promotions, recommendations, and duplicate boilerplate. It preserves source language, product facts, identifiers, specifications, numbers, currencies, variants, tables, and relevant links. Page instructions are treated as untrusted content. Temperature is fixed at `0.1`, with 16,384 output tokens. The selected model gets at most two attempts within 60 seconds; temporary model/network failures can use one backup attempt within the existing 120-second total cleanup deadline. Cleanup enables JSON output mode and validates the internal `{markdown, selectedGalleryIds}` response before accepting it. A single outer JSON code fence is accepted without changing Markdown inside it. The backup is GLM 5.3 FlashX; selecting FlashX as primary uses GLM 5.3 Flash as backup. Both GLM models use low reasoning effort. FlashX's higher per-request cost applies only when cleanup falls back. Invalid JSON or schema output can use one backup attempt. The same captured Markdown is reused, and evidence records the model that actually succeeded. Configuration, authentication, credit, rate-limit, refusal, and truncation errors do not switch models. Invalid backup output still fails safely and preserves previous evidence. These instructions cannot prove factual preservation; inspect live results.
 
@@ -844,6 +844,9 @@ Start with paginated summary APIs, relevant progress polling, bulk/bounded write
 
 ## Further documentation
 
+- [IDQ catalog enrichment](docs/idq.md): input modes, attribute requirements, traceable Excel output, durable research limits and verification.
+- [Agency Agents setup](docs/agency-agents.md): seven project review agents, pinned provenance, usage and integrity verification.
+- [Agency review — 15 October 2026](docs/agency-review-2026-10-15.md): current security, architecture, UI and deployment findings, validation evidence and prioritized recommendations.
 - [Codebase review](docs/codebase-review.md): ratings, defects, scaling analysis, prioritized work, and actual validation limits.
 - [Security and durable jobs](docs/security-and-jobs.md): implementation details and historical validation; older sections include retired retrieval designs.
 

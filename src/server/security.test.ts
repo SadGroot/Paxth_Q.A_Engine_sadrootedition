@@ -11,6 +11,7 @@ import {initializeDatabase,verifySchema} from './database';
 import {initializeAuth,registerAuth,hashPassword,hashSessionToken} from './auth';
 import {initializeProvider,registerProviderRoutes,getProviderSettings} from './provider';
 import {initializeJobRuns,registerJobRunRoutes,startJobWorker} from './jobRunner';
+import { initializeIdq } from './idqJobs';
 import {ApiError,registerCatalogRoutes} from './catalog';
 import {registerScrapeRoutes} from './scraper';
 import {registerJobImageRoutes} from './jobImages';
@@ -91,7 +92,7 @@ const listen=(s:ReturnType<typeof createServer>)=>new Promise<void>(resolve=>s.l
 try {
   await initializeDatabase(pool);
   await initializeQaConfiguration(drizzle(pool,{schema}));
-  await initializeAuth(pool); await initializeProvider(pool); await initializeJobRuns(pool); await verifySchema(pool);
+  await initializeAuth(pool); await initializeProvider(pool); await initializeJobRuns(pool); await initializeIdq(pool); await verifySchema(pool);
   // Also exercise idempotent startup migrations.
   await initializeDatabase(pool);
   await listen(provider);

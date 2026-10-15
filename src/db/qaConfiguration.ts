@@ -5,6 +5,7 @@ import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import { attributeSets, qaAgentSettings } from "./schema";
 import { DEFAULT_QA_AGENT_MEMORY } from "../lib/qaAgent";
 import { migrateCatalogProductTypeHeader, parseCatalogHeaders, validateCatalogHeaders } from "../lib/catalogGeneration";
+import { validateIdqRequirements } from '../lib/idq';
 
 const DEFAULT_SETS = [
   "TestSet", "WarrantySet", "Grocery Single Pack", "Grocery Multi Pack", "H&L-C&D-Cookware",
@@ -66,6 +67,7 @@ export async function initializeQaConfiguration(db: NodePgDatabase<typeof import
       created_at TIMESTAMP NOT NULL DEFAULT NOW(), updated_at TIMESTAMP NOT NULL DEFAULT NOW()
     )`);
     await tx.execute(sql`ALTER TABLE attribute_sets ADD COLUMN IF NOT EXISTS catalog_headers JSONB`);
+    await tx.execute(sql`ALTER TABLE attribute_sets ADD COLUMN IF NOT EXISTS catalog_header_requirements JSONB NOT NULL DEFAULT '{}'::jsonb`);
     const legacy = await tx.execute(sql`SELECT id,rules_markdown,catalog_headers FROM attribute_sets
       WHERE catalog_headers IS NULL OR (jsonb_typeof(catalog_headers)='array' AND catalog_headers ? 'attributes__product_type') FOR UPDATE`);
     for (const set of legacy.rows) {
@@ -153,11 +155,15 @@ export function registerQaConfigurationRoutes(app: Express, db: NodePgDatabase<t
   app.post("/api/attribute-sets", async (req, res) => {
     if (!db) return res.status(503).json({ error: "DB not connected" });
     if (!validSet(req.body)) return res.status(400).json({ error: "A name and text mapping rules are required" });
-    try { validateCatalogHeaders(req.body.catalogHeaders === undefined ? [] : req.body.catalogHeaders); }
+    try {
+      validateCatalogHeaders(req.body.catalogHeaders === undefined ? [] : req.body.catalogHeaders);
+      validateIdqRequirements(req.body.catalogHeaderRequirements ?? {}, req.body.catalogHeaders ?? []);
+    }
     catch (error) { return res.status(400).json({ error: (error as Error).message }); }
     try {
       const [saved] = await db.insert(attributeSets).values({
         id: randomUUID(), name: req.body.name.trim(), rulesMarkdown: req.body.rulesMarkdown, catalogHeaders: req.body.catalogHeaders ?? [],
+        catalogHeaderRequirements: req.body.catalogHeaderRequirements ?? {},
       }).onConflictDoNothing().returning();
       if (!saved) return res.status(409).json({ error: "An attribute set with this name already exists" });
       res.status(201).json(mapSet(saved));
@@ -169,12 +175,22 @@ export function registerQaConfigurationRoutes(app: Express, db: NodePgDatabase<t
   app.put("/api/attribute-sets/:id", async (req, res) => {
     if (!db) return res.status(503).json({ error: "DB not connected" });
     if (!validSet(req.body)) return res.status(400).json({ error: "A name and text mapping rules are required" });
-    try { validateCatalogHeaders(req.body.catalogHeaders === undefined ? [] : req.body.catalogHeaders); }
+    try {
+      validateCatalogHeaders(req.body.catalogHeaders === undefined ? [] : req.body.catalogHeaders);
+      if (req.body.catalogHeaderRequirements !== undefined) validateIdqRequirements(req.body.catalogHeaderRequirements, req.body.catalogHeaders);
+    }
     catch (error) { return res.status(400).json({ error: (error as Error).message }); }
     try {
+      const [existing] = await db.select().from(attributeSets).where(eq(attributeSets.id, req.params.id));
+      if (!existing) return res.status(404).json({ error: "Attribute set no longer exists. Reload the list." });
+      const headers = req.body.catalogHeaders ?? existing.catalogHeaders;
+      const requirements = req.body.catalogHeaderRequirements ?? Object.fromEntries(Object.entries(existing.catalogHeaderRequirements).filter(([header]) => headers.includes(header)));
+      try { validateIdqRequirements(requirements, headers); }
+      catch (error) { return res.status(400).json({ error: (error as Error).message }); }
       const [saved] = await db.update(attributeSets).set({
         name: req.body.name.trim(), rulesMarkdown: req.body.rulesMarkdown, updatedAt: new Date(),
         ...(req.body.catalogHeaders !== undefined ? { catalogHeaders: req.body.catalogHeaders } : {}),
+        catalogHeaderRequirements: requirements,
       }).where(eq(attributeSets.id, req.params.id)).returning();
       if (!saved) return res.status(404).json({ error: "Attribute set no longer exists. Reload the list." });
       res.json(mapSet(saved));

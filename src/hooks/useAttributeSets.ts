@@ -38,7 +38,7 @@ export function useAttributeSets() {
     setAttributeSets(current => [...current, saved]);
   };
 
-  const updateSet = async (id: string, updates: Pick<AttributeSet, "name" | "rulesMarkdown" | "catalogHeaders">) => {
+  const updateSet = async (id: string, updates: Pick<AttributeSet, "name" | "rulesMarkdown" | "catalogHeaders" | "catalogHeaderRequirements">) => {
     const response = await fetch(`/api/attribute-sets/${encodeURIComponent(id)}`, {
       method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(updates),
     });

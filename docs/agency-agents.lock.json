@@ -1,0 +1,63 @@
+{
+  "schemaVersion": 1,
+  "installedOn": "2026-10-15",
+  "installerApp": {
+    "repository": "https://github.com/msitarzewski/agency-agents-app",
+    "commit": "b2624dabd5160299e900d2b63210744ddfd57cb9",
+    "inspectedOnly": true
+  },
+  "catalog": {
+    "repository": "https://github.com/msitarzewski/agency-agents",
+    "commit": "652b2692f8d8ec2b1f1a38e559073e287dfdc469",
+    "converter": "scripts/convert.sh --tool codex",
+    "converterSha256": "c370a6e9bbea4fbc5b684a614ef9edf540010cf8c9be102a386678b8e8656a8f"
+  },
+  "license": {
+    "path": ".codex/agents/LICENSE",
+    "sha256": "9a45258434d5cedf0af73c9ad4771373701225038d246c49219026c33677f66f"
+  },
+  "agents": [
+    {
+      "name": "Application Security Engineer",
+      "source": "security/security-appsec-engineer.md",
+      "destination": ".codex/agents/application-security-engineer.toml",
+      "sha256": "30bc736c02f13df649202b2fbbe424c1dfb0df2c257930c9f0b993d746294497"
+    },
+    {
+      "name": "Software Architect",
+      "source": "engineering/engineering-software-architect.md",
+      "destination": ".codex/agents/software-architect.toml",
+      "sha256": "dec3e4de3fdbac219d2d1420be7c40fd98fdd241b887ee74fcbde80e5ffdcd2a"
+    },
+    {
+      "name": "DevOps Automator",
+      "source": "engineering/engineering-devops-automator.md",
+      "destination": ".codex/agents/devops-automator.toml",
+      "sha256": "7b42a75f6917d251d4266ec6be9a96044d50e48915a12f28047a2b2e6e543a3a"
+    },
+    {
+      "name": "UI Designer",
+      "source": "design/design-ui-designer.md",
+      "destination": ".codex/agents/ui-designer.toml",
+      "sha256": "eddf1c1ff03905f165ef56f26ba4543ca5fc55061d4cf6ad32ecc90377ec5c14"
+    },
+    {
+      "name": "UX Architect",
+      "source": "design/design-ux-architect.md",
+      "destination": ".codex/agents/ux-architect.toml",
+      "sha256": "2ad267f1c610c170abe6d00dc0609170ef6baf2a87642419b43b434ce131285b"
+    },
+    {
+      "name": "Accessibility Auditor",
+      "source": "testing/testing-accessibility-auditor.md",
+      "destination": ".codex/agents/accessibility-auditor.toml",
+      "sha256": "edb4564fab0c30af5f02ef4afa444876b06587b52e0dfff81e8e92b66764ee5e"
+    },
+    {
+      "name": "Reality Checker",
+      "source": "testing/testing-reality-checker.md",
+      "destination": ".codex/agents/reality-checker.toml",
+      "sha256": "0eef38abe35b62ce9e82d1ab70f2e95ce810bbb1a3e184939ccd5889cdfde292"
+    }
+  ]
+}
