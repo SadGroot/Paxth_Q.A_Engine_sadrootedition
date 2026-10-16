@@ -17,7 +17,7 @@ function Diagnostics({ report }: { report: ScrapeReport }) {
 }
 
 export function ScraperModule() {
-  const { skuDataList, scrapeSku, updateSku, catalogError, addNotification } = useAppContext();
+  const { skuDataList, scrapeSku, updateSku, catalogError, addNotification, request: api, workspaceId, workspaceSignal } = useAppContext();
   const [mode, setMode] = useState<'preview' | 'sku'>('preview');
   const [testUrl, setTestUrl] = useState('');
   const [preview, setPreview] = useState<ScrapePreview | null>(null);
@@ -57,7 +57,7 @@ export function ScraperModule() {
     if (mode === 'preview') setPreview(null);
     try {
       if (mode === 'preview') {
-        const result = await previewScrapeUrl(testUrl.trim(), controller.signal);
+        const result = await previewScrapeUrl(testUrl.trim(), controller.signal, api);
         if (mounted.current && request.current === controller && !controller.signal.aborted) setPreview(result);
       } else if (selected) {
         await scrapeSku(selected, controller.signal);

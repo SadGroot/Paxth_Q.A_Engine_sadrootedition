@@ -10,7 +10,6 @@ import { CatalogFileDownload } from './CatalogFileDownload';
 import { CatalogImagePicker } from './CatalogImagePicker';
 import { exportCatalogImages } from '../lib/catalogImageExport';
 import type { JobType, CatalogOutputs, CatalogFileGroup } from '../types';
-import { api } from "../lib/api";
 import { cn } from "../lib/utils";
 import ExcelJS from "exceljs";
 import { saveAs } from "file-saver";
@@ -26,7 +25,7 @@ type Run = {
 };
 const active = (run: Run) => ["queued", "running", "cancelling"].includes(run.status);
 const hasHistory = (runs: Run[] = []) => runs.some(run => ["completed", "failed", "cancelled"].includes(run.status));
-const request = <T,>(url: string, body?: unknown) => api<T>(url, body === undefined ? {cache:'no-store'} : {method:'POST',body:JSON.stringify(body)});
+
 const runSkus = (run: Run) => (run.items || []).map(item => {
   if (item.result) return item.result;
   const snapshot = unreviewedRunSnapshot(item.snapshot);
@@ -45,7 +44,8 @@ const runOutputs = (run: Run): CatalogOutputs => run.catalogOutputs || prepareCa
   (run.items || []).map(item => item.snapshot), runGroups(run).map(group => ({ ...group, rulesMarkdown: '' })), true);
 
 export function JobsModule({ initialJobId }: { initialJobId?: string }) {
-  const { skuDataList, jobs: allJobs, workspaceMode, removeJob, addNotification, refreshData, user } = useAppContext();
+  const { skuDataList, jobs: allJobs, workspaceMode, removeJob, addNotification, refreshData, user, request: api, workspaceId, workspaceSignal } = useAppContext();
+  const request = <T,>(url: string, body?: unknown) => api<T>(url, body === undefined ? {cache:'no-store'} : {method:'POST',body:JSON.stringify(body)});
   const isCatalog = workspaceMode === 'catalog';
   const jobs = allJobs.filter(job => (job.jobType || 'qa') === workspaceMode);
   const [histories, setHistories] = useState<Record<string, Run[]>>({});
@@ -66,6 +66,8 @@ export function JobsModule({ initialJobId }: { initialJobId?: string }) {
   const latest = useRef({ refreshData, jobs });
   latest.current = { refreshData, jobs };
   const jobIds = jobs.map(job => job.id).join("\n");
+  const completedRuns = useRef(new Map<string, Run>());
+  const progressStamp = useRef('');
   const pendingRequests = useRef(new Map<string, string>());
 
   useEffect(() => {
@@ -84,11 +86,18 @@ export function JobsModule({ initialJobId }: { initialJobId?: string }) {
       try {
         const pairs = await Promise.all(latest.current.jobs.map(async job => [job.id, await request<Run[]>(`/api/jobs/${encodeURIComponent(job.id)}/runs`)] as const));
         const detailRuns = pairs.flatMap(([, history]) => isCatalog ? history.slice(0, 1) : history.filter(active));
-        const runs = await Promise.all(detailRuns.map(run => request<Run>(`/api/job-runs/${run.id}`)));
+        const runs = await Promise.all(detailRuns.map(async run => {
+          if (!active(run) && completedRuns.current.has(run.id)) return completedRuns.current.get(run.id)!;
+          const detail = await request<Run>(`/api/job-runs/${run.id}`);
+          if (!active(detail)) completedRuns.current.set(run.id, detail);
+          return detail;
+        }));
         if (!disposed) {
           setHistories(Object.fromEntries(pairs)); setActiveRuns(runs.filter(active));
           setCatalogRuns(Object.fromEntries(runs.map(run => [run.jobId, run])));
-          setPollError(""); await latest.current.refreshData();
+          setPollError("");
+          const stamp = JSON.stringify([pairs.map(([id, runs]) => [id, runs.map(run => [run.id, run.status])]), runs.map(run => [run.id, run.items?.map(item => [item.sku, item.status, item.attempts])])]);
+          if (stamp !== progressStamp.current) { progressStamp.current = stamp; await latest.current.refreshData(); }
         }
       } catch (error) { if (!disposed) setPollError(error instanceof Error ? error.message : "Could not load job progress"); }
       finally { busy = false; }
@@ -102,11 +111,11 @@ export function JobsModule({ initialJobId }: { initialJobId?: string }) {
     setViewRun(null);
     if (!selectedRunId) return;
     let disposed = false;
-    let busy = false;
+    let busy = false, finished = false;
     const poll = async () => {
-      if (busy) return;
+      if (busy || finished) return;
       busy = true;
-      try { const run = await request<Run>(`/api/job-runs/${selectedRunId}`); if (!disposed) setViewRun(run); }
+      try { const run = await request<Run>(`/api/job-runs/${selectedRunId}`); if (!disposed) { setViewRun(run); finished = !active(run); } }
       catch (error) { if (!disposed) setPollError(error instanceof Error ? error.message : "Could not load run results"); }
       finally { busy = false; }
     };
@@ -210,7 +219,9 @@ export function JobsModule({ initialJobId }: { initialJobId?: string }) {
           const workbook = new ExcelJS.Workbook();
           populateCatalogFile(workbook.addWorksheet('Catalog'), files[0]);
           const exportName = jobsToExport.length === 1 ? jobsToExport[0].name : files[0].attributeSet + '_Combined';
-          saveAs(new Blob([await workbook.xlsx.writeBuffer()], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }),
+          const exportedBuffer = await workbook.xlsx.writeBuffer();
+          workspaceSignal.throwIfAborted();
+          saveAs(new Blob([exportedBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }),
             exportName.replace(/[^a-zA-Z0-9_-]/g, '_') + '_Catalog_Upload.xlsx');
         } else setCombinedFiles(files);
         const count = files.reduce((total, file) => total + file.rows.length, 0);
@@ -262,6 +273,7 @@ export function JobsModule({ initialJobId }: { initialJobId?: string }) {
       populateQaWorksheet(sheet, headerOrder.headers, jobSkus);
       
       const buffer = await workbook.xlsx.writeBuffer();
+      workspaceSignal.throwIfAborted();
       const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
       const exportName = jobsToExport.length === 1 ? jobsToExport[0].name : `${attributeSet}_Combined`;
       const filename = `${exportName.replace(/[^a-zA-Z0-9_-]/g, '_')}_QA_Results.xlsx`;
@@ -304,7 +316,8 @@ export function JobsModule({ initialJobId }: { initialJobId?: string }) {
     try {
       const run = await request<Run>(`/api/job-runs/${encodeURIComponent(selectedRunId)}`);
       if (active(run)) throw new Error('Wait for the Catalog run to finish before exporting images.');
-      const blob = await exportCatalogImages(run.id, run.items || [], (done, total) => setImageExport({ done, total }));
+      const blob = await exportCatalogImages(run.id, run.items || [], (done, total) => setImageExport({ done, total }), workspaceId, workspaceSignal);
+      workspaceSignal.throwIfAborted();
       saveAs(blob, selectedJobToView.name.replace(/[^a-zA-Z0-9_-]/g, '_') + '_Images.zip');
       addNotification({ type: 'success', title: 'Images Exported', message: 'Downloaded all selected images from this run as 1500 × 1500 JPG files.' });
     } catch (error) { addNotification({ type: 'error', title: 'Image Export Failed', message: error instanceof Error ? error.message : 'Could not export images.' }); }
@@ -348,15 +361,14 @@ export function JobsModule({ initialJobId }: { initialJobId?: string }) {
           {activeRuns.filter(run => jobs.some(job => job.id === run.jobId)).map(run => {
             const items = (run.items || []).filter(item => item.status !== "skipped");
             const completed = items.filter(item => ["completed", "failed", "cancelled"].includes(item.status)).length;
-            const canStop = user?.role === "admin" || user?.id === run.actorId;
             return <div key={run.id} className="bg-[#F5F2EF] border border-[#E5E2DE] rounded-sm p-4 space-y-3">
               <div className="flex items-center justify-between">
                 <div><h4 className="font-serif text-lg">{jobs.find(job => job.id === run.jobId)?.name} — {run.status}</h4>
                   <p className="text-xs text-[#8C8882]">{completed} of {items.length} processed · Started by {run.actorName}</p></div>
-                {canStop && <button onClick={() => stopRun(run)} disabled={run.status === "cancelling"}
+                <button onClick={() => stopRun(run)} disabled={run.status === "cancelling"}
                   className="flex items-center gap-2 px-4 py-2 text-xs text-red-700 border border-red-200 rounded-sm disabled:opacity-50">
                   <StopCircle className="w-4 h-4" />{run.status === "cancelling" ? "Cancelling…" : "Cancel Run"}
-                </button>}
+                </button>
               </div>
               <p className="text-xs font-mono">{items.find(item => item.status === "running")?.sku || "Waiting for the server worker"}</p>
               <progress aria-label="Job progress" value={completed} max={Math.max(1, items.length)} className="w-full h-2" />

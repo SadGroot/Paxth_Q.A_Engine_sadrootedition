@@ -20,9 +20,9 @@ Do not invent, infer, translate, browse, fill missing values, or combine other p
 Return a JSON object with exactly markdown (a nonempty Markdown string) and selectedGalleryIds (an array of supplied gallery ID strings), without a surrounding code fence, commentary, or a source footer; the server appends source URLs.
 Example response structure: {"markdown":"# Product\\n\\n| Specification | Value |\\n| --- | --- |\\n| Weight | 12.75 kg |","selectedGalleryIds":["gallery-1"]}. Use only facts and gallery IDs supplied in the page; use [] when no product gallery is available.`;
 
-function requireProvider(signal: AbortSignal) {
+function requireProvider(signal: AbortSignal, settings: AppSettings) {
   signal.throwIfAborted();
-  try { getProviderCredentials(); }
+  try { getProviderCredentials(settings.providerKeySlot); }
   catch (error) { throw new ScrapeError(error instanceof ProviderError ? error.message : 'Server provider credentials are unavailable.', 503, 'PROVIDER_UNAVAILABLE'); }
   getScraperApiKey();
 }
@@ -50,7 +50,7 @@ async function structurePage(page: CollectedPage, settings: AppSettings, signal:
         ...(usedFallback && { deepseekReasoningEffort: 'none' }),
       }, { messages: payload.messages }, 'catalog').payload, ...payload };
       const response = await completeQa(request, requestSignal, {
-        taskLabel: 'Scraping', maxAttempts,
+        taskLabel: 'Scraping', maxAttempts, keySlot: settings.providerKeySlot,
         beforeAttempt: async (_attempt, actual) => { reasoningEffort = (actual as typeof request).reasoning_effort; },
         onAttemptError: async (_attempt, error) => { if (maxAttempts === 2) primaryFailure = error; },
       }).catch(error => {
@@ -114,13 +114,13 @@ async function structurePage(page: CollectedPage, settings: AppSettings, signal:
 }
 
 export async function collectProductPage(url: string, signal: AbortSignal, settings: AppSettings, collect = collectPage) {
-  requireProvider(signal);
+  requireProvider(signal, settings);
   // Retrieval releases admission before model cleanup; retries reuse its Markdown.
   return structurePage(await collect(url, signal), settings, signal);
 }
 
 export async function scrapeProductPage(url: string, signal: AbortSignal, settings: AppSettings, collect = collectPage) {
-  requireProvider(signal);
+  requireProvider(signal, settings);
   const page = await collect(url, signal);
   if (page.status === 'partial') throw new ScrapeError('The page could not be extracted completely. Supply the remaining content manually.', 502, 'INCOMPLETE_CONTENT', page.report);
   return structurePage(page, settings, signal);

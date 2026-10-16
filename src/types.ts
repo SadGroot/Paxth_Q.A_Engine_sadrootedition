@@ -37,6 +37,7 @@ export interface User {
 }
 
 export interface UserAccount {
+  keySlot?: string;
   id: string;
   username: string;
   role: 'admin' | 'user';

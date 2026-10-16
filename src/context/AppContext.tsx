@@ -29,6 +29,10 @@ export interface AppNotification {
 type AccountResult = { success: boolean; error?: string };
 type Catalog = ReturnType<typeof useCatalogData>;
 interface AppContextType {
+  workspaceId: string;
+  setWorkspaceId: (id: string) => void;
+  request: typeof api;
+  workspaceSignal: AbortSignal;
   workspaceMode: JobType;
   setWorkspaceMode: (mode: JobType) => void;
   user: User | null;
@@ -64,17 +68,34 @@ const AppContext = createContext<AppContextType | undefined>(undefined);
 const messageOf = (error: unknown) => error instanceof Error ? error.message : 'Request failed. Please retry.';
 
 export function AppProvider({ children }: { children: ReactNode }) {
+  const [selectedWorkspaceId, selectWorkspace] = useState<string>();
+  const [lifetime, setLifetime] = useState(() => new AbortController());
+  const setWorkspaceId = useCallback((id: string) => { lifetime.abort(); setLifetime(new AbortController()); selectWorkspace(id); }, [lifetime]);
+  const [sessionVersion, setSessionVersion] = useState(0);
+  const resetSession = useCallback(() => { lifetime.abort(); setLifetime(new AbortController()); selectWorkspace(undefined); setSessionVersion(value => value + 1); }, [lifetime]);
+  return <AppState key={(selectedWorkspaceId || 'self') + ':' + sessionVersion} lifetime={lifetime} selectedWorkspaceId={selectedWorkspaceId} setWorkspaceId={setWorkspaceId} resetSession={resetSession}>{children}</AppState>;
+}
+
+function AppState({ children, lifetime, selectedWorkspaceId, setWorkspaceId, resetSession }: {
+  children: ReactNode; lifetime: AbortController; selectedWorkspaceId?: string; setWorkspaceId: (id: string) => void; resetSession: () => void;
+}) {
   const [workspaceMode, setWorkspaceMode] = useState<JobType>('qa');
   const [user, setUser] = useState<User | null>(null);
+  const workspaceId = selectedWorkspaceId || user?.id || '';
+  const workspaceSignal = lifetime.signal;
+  const request = useCallback(<T,>(path: string, init: RequestInit = {}) => api<T>(path, {
+    ...init, signal: AbortSignal.any([workspaceSignal, ...(init.signal ? [init.signal] : [])]),
+  }, workspaceId), [workspaceId, workspaceSignal]);
   const [sessionLoading, setSessionLoading] = useState(true);
   const [usersList, setUsersList] = useState<UserAccount[]>([]);
   const [jobs, setJobs] = useState<Job[]>([]);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
-  const { skuDataList, addParsedData, catalogError, updateSku, scrapeSku, ingestSkuFile, removeSkus, refreshCatalog, resetCatalog, isLoading } = useCatalogData(Boolean(user), user?.id);
+  const { skuDataList, addParsedData, catalogError, updateSku, scrapeSku, ingestSkuFile, removeSkus, refreshCatalog, resetCatalog, isLoading } = useCatalogData(Boolean(user), workspaceId, request);
 
   const addNotification = useCallback((notification: Omit<AppNotification, 'id' | 'timestamp' | 'read'>) => {
+    if (workspaceSignal.aborted) return;
     setNotifications(prev => [{ ...notification, id: crypto.randomUUID(), timestamp: new Date().toISOString(), read: false }, ...prev]);
-  }, []);
+  }, [workspaceSignal]);
   const notifyFailure = useCallback((error: unknown) => {
     addNotification({ type: 'error', title: 'Request failed', message: messageOf(error) });
   }, [addNotification]);
@@ -84,16 +105,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
     for (const key of ['paxth_qa_user_session', 'paxth_qa_users_db_v1', 'qa-analyzer-settings']) {
       try { localStorage.removeItem(key); } catch { /* Storage may be disabled. */ }
     }
-    const expire = () => { setUser(null); setJobs([]); setUsersList([]); };
+    const expire = () => { lifetime.abort(); resetSession(); };
     window.addEventListener('session-expired', expire);
     let active = true;
-    api<User>('/api/auth/me').then(value => { if (active) setUser(value); }).catch(error => {
+    api<User>('/api/auth/me', { signal: workspaceSignal }).then(value => { if (active) setUser(value); }).catch(error => {
       if (active && !(error instanceof ApiError && error.status === 401)) notifyFailure(error);
     }).finally(() => { if (active) setSessionLoading(false); });
     return () => { active = false; window.removeEventListener('session-expired', expire); };
-  }, [notifyFailure]);
+  }, [notifyFailure, resetSession, lifetime]);
 
-  const refreshJobs = useCallback(async () => { setJobs(await api<Job[]>('/api/jobs')); }, []);
+  const refreshJobs = useCallback(async () => { setJobs(await request<Job[]>('/api/jobs')); }, [request]);
   const refreshData = useCallback(async () => {
     await Promise.all([refreshCatalog(), refreshJobs()]);
   }, [refreshCatalog, refreshJobs]);
@@ -101,11 +122,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!user) { setJobs([]); setUsersList([]); return; }
     let active = true;
-    api<Job[]>('/api/jobs').then(value => { if (active) setJobs(value); }).catch(error => { if (active) notifyFailure(error); });
-    if (user.role === 'admin') api<UserAccount[]>('/api/users').then(value => { if (active) setUsersList(value); }).catch(error => { if (active) notifyFailure(error); });
+    request<Job[]>('/api/jobs').then(value => { if (active) setJobs(value); }).catch(error => { if (active) notifyFailure(error); });
+    if (user.role === 'admin') request<UserAccount[]>('/api/users').then(value => { if (active) setUsersList(value); }).catch(error => { if (active) notifyFailure(error); });
     else setUsersList([]);
     return () => { active = false; };
-  }, [user, notifyFailure]);
+  }, [user, notifyFailure, request]);
 
   const login = useCallback(async (username: string, password: string): Promise<AccountResult> => {
     try {
@@ -115,75 +136,75 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const logout = useCallback(async () => {
-    try { await api('/api/auth/logout', { method: 'POST' }); setUser(null); setJobs([]); setUsersList([]); return true; }
+    try { await request('/api/auth/logout', { method: 'POST' }); lifetime.abort(); resetSession(); return true; }
     catch (error) { notifyFailure(error); return false; }
-  }, [notifyFailure]);
+  }, [notifyFailure, request]);
 
   const addUserAccount = useCallback(async (newUser: UserAccountInput): Promise<AccountResult> => {
     try {
-      const account = await api<UserAccount>('/api/users', { method: 'POST', body: JSON.stringify(newUser) });
+      const account = await request<UserAccount>('/api/users', { method: 'POST', body: JSON.stringify(newUser) });
       setUsersList(prev => [account, ...prev]);
       return { success: true };
     } catch (error) { return { success: false, error: messageOf(error) }; }
-  }, []);
+  }, [request]);
 
   const updateUserAccount = useCallback(async (id: string, updates: Partial<UserAccountInput>): Promise<AccountResult> => {
     try {
-      const account = await api<UserAccount>(`/api/users/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify(updates) });
+      const account = await request<UserAccount>(`/api/users/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify(updates) });
       setUsersList(prev => prev.map(item => item.id === id ? account : item));
-      if (id === user?.id) setUser(null); // Account changes revoke every session, including this one.
+      if (id === user?.id) { lifetime.abort(); resetSession(); } // Account changes revoke every session, including this one.
       return { success: true };
     } catch (error) { return { success: false, error: messageOf(error) }; }
-  }, [user?.id]);
+  }, [user?.id, request, lifetime, resetSession]);
 
   const deleteUserAccount = useCallback(async (id: string): Promise<AccountResult> => {
     try {
-      await api(`/api/users/${encodeURIComponent(id)}`, { method: 'DELETE' });
+      await request(`/api/users/${encodeURIComponent(id)}`, { method: 'DELETE' });
       setUsersList(prev => prev.filter(account => account.id !== id));
-      if (id === user?.id) setUser(null);
+      if (id === user?.id) { lifetime.abort(); resetSession(); }
       return { success: true };
     } catch (error) { return { success: false, error: messageOf(error) }; }
-  }, [user?.id]);
+  }, [user?.id, request, lifetime, resetSession]);
 
   const deleteSku = useCallback((sku: string) => removeSkus([sku]), [removeSkus]);
   const clearData = useCallback(async () => {
     try {
-      await api('/api/data', { method: 'DELETE' });
+      await request('/api/data', { method: 'DELETE' });
       setJobs([]);
       resetCatalog();
       return true;
     } catch (error) { notifyFailure(error); return false; }
-  }, [resetCatalog, notifyFailure]);
+  }, [resetCatalog, notifyFailure, request]);
 
   const addJobs = useCallback(async (newJobs: Job[]) => {
     try {
-      const saved = await api<Job[]>('/api/jobs', { method: 'POST', body: JSON.stringify(newJobs) });
+      const saved = await request<Job[]>('/api/jobs', { method: 'POST', body: JSON.stringify(newJobs) });
       setJobs(prev => [...prev, ...saved]);
       return true;
     } catch (error) { notifyFailure(error); return false; }
-  }, [notifyFailure]);
+  }, [notifyFailure, request]);
 
   const updateJob = useCallback(async (id: string, updates: Partial<Job>) => {
     try {
-      const saved = await api<Job>(`/api/jobs/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify(updates) });
+      const saved = await request<Job>(`/api/jobs/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify(updates) });
       setJobs(prev => prev.map(job => job.id === id ? saved : job));
       return true;
     } catch (error) { notifyFailure(error); return false; }
-  }, [notifyFailure]);
+  }, [notifyFailure, request]);
 
   const removeJob = useCallback(async (id: string) => {
     try {
-      await api(`/api/jobs/${encodeURIComponent(id)}`, { method: 'DELETE' });
+      await request(`/api/jobs/${encodeURIComponent(id)}`, { method: 'DELETE' });
       setJobs(prev => prev.filter(job => job.id !== id));
       return true;
     } catch (error) { notifyFailure(error); return false; }
-  }, [notifyFailure]);
+  }, [notifyFailure, request]);
 
   const markNotificationRead = useCallback((id: string) => setNotifications(prev => prev.map(item => item.id === id ? { ...item, read: true } : item)), []);
   const clearNotifications = useCallback(() => setNotifications([]), []);
   return (
     <AppContext.Provider value={{
-      workspaceMode, setWorkspaceMode,
+      workspaceId, setWorkspaceId, request, workspaceSignal, workspaceMode, setWorkspaceMode,
       user, sessionLoading, login, logout, usersList, addUserAccount, updateUserAccount, deleteUserAccount,
       skuDataList, addParsedData, updateSku, scrapeSku, ingestSkuFile, deleteSku, clearData, removeSkus, catalogError, isLoadingSkuData: isLoading,
       jobs, addJobs, updateJob, removeJob, refreshData,

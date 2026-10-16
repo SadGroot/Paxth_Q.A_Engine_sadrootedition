@@ -6,7 +6,7 @@ Upload a spreadsheet, prepare the evidence, create a job, run the review, and ex
 
 **Development status:** the app is currently being built in GitHub Codespaces. It has not been deployed. The production instructions below describe a possible future deployment.
 
-**Current readiness:** imported data can no longer impersonate QA results. The repository builds and its fast tests pass, but remaining findings include a known administrator bootstrap password fallback, vulnerable dependencies, and scaling limits. Read the [codebase review](docs/codebase-review.md) for the original ratings, the QA integrity fix, and remaining release work. A successful build alone does not establish production readiness.
+**Current readiness:** private workspaces, permanent per-user key slots and four-workspace execution are implemented. Existing installations require the explicit [workspace migration](docs/workspaces.md). Configure real keys and verify live throughput before onboarding; remaining dependency findings in the [codebase review](docs/codebase-review.md) still apply.
 
 ## Contents
 
@@ -43,7 +43,7 @@ Upload a spreadsheet, prepare the evidence, create a job, run the review, and ex
 
 A **SKU** identifies a product. An **attribute set** is a category and its validation rules. **Evidence** means supplied SAP text or product-page content. A **job** groups products; a **run** records one execution of that job. A **QA verdict** describes review findings, separately from execution status.
 
-All users in one installation share the catalog, jobs, rules, history, and QA model settings. QA/Catalog and scraping use independent models with the same shared server provider credentials. This is a shared internal workspace without organization/tenant isolation.
+Each account has a private workspace for catalog, jobs, evidence, history and IDQ. Admins can explicitly select another workspace. Rules and QA/Catalog instructions remain shared; admins control global model defaults and workspace overrides. See [workspace setup and migration](docs/workspaces.md).
 
 There is no direct SAP/ERP integration. SAP text comes from the spreadsheet or editor. The app does not automatically update SAP, a storefront, or the uploaded file.
 
@@ -63,7 +63,7 @@ flowchart LR
     Browser --> Export[Excel review workbook]
 ```
 
-The browser parses imports and generates Excel exports. Express handles authentication, validation, persistence, provider requests, and background execution. PostgreSQL holds durable state. One database-owned worker processes one SKU at a time across the installation.
+The browser parses imports and generates Excel exports. Express handles authentication, validation, persistence, provider requests, and background execution. PostgreSQL holds durable state. One database-owned scheduler runs up to four workspaces concurrently, with one job per workspace and one SKU at a time in each job.
 
 The review follows this source hierarchy:
 
@@ -121,19 +121,11 @@ For Supabase, copy the exact TLS-enabled URI from the project's Connect dialog. 
 
 ### 2. Configure provider credentials
 
-```dotenv
-AICREDITS_API_KEY=your-private-aicredits-key
-```
-
-With neither LLM override set, the server uses `https://aicredits.in/v1`. This same-provider HTTPS route is reachable from this Codespace; the documented `api.aicredits.in` subdomain timed out during verification. QA and Markdown conversion use the same server-only key; Crawl4AI receives only its own key.
-
-                                                                                                                                                                                                                                                                                                              y.
-
-To use an explicit OpenAI-compatible provider, set both `LLM_BASE_URL` and `LLM_API_KEY`. A partial override fails rather than using the AI Credits key with another destination. The server appends `/chat/completions` unless the URL already ends with it. The provider must accept the selected model and chat-completion payload, including JSON output mode.
+Configure distinct server-only `AICREDITS_API_KEY_1` through `AICREDITS_API_KEY_5` slots in `.env`. Each account receives one permanent slot; all its AI requests use that key at `https://aicredits.in/v1`. Crawl4AI uses its separate `CRAWL4AI_API_KEY`. See [workspace setup](docs/workspaces.md) for allocation, migration and deployment limits.
 
 ### 3. Create the first administrator
 
-Supply a unique username and a password of **12–256 characters**. The current script has a known default credential fallback; **always override it**.
+Supply an explicit username and password of **12–256 characters**. Bootstrap also requires an unused configured numbered API-key slot; it has no default credentials.
 
 This Bash example avoids putting the password in shell history:
 
@@ -176,9 +168,7 @@ This checks development HTML, database readiness, Vite, and the live-reload WebS
 | --- | --- | --- |
 | `DATABASE_URL` | Yes | PostgreSQL URI; loaded from the process environment or `.env` |
 | `APP_ORIGIN` | In production | Exact public HTTPS origin, e.g. `https://qa.example.com`, without path/query/credentials |
-| `LLM_BASE_URL` | For QA with `LLM_API_KEY` | Shared server-only provider endpoint |
-| `LLM_API_KEY` | For QA with `LLM_BASE_URL` | Shared server-only provider key |
-| `AICREDITS_API_KEY` | For AI Credits | Shared server-only key for `https://aicredits.in/v1`; used when both LLM overrides are absent/empty |
+| `AICREDITS_API_KEY_1` … `_5` | One per account | Distinct server-only keys permanently assigned to accounts |
 | `CRAWL4AI_API_KEY` | For URL scraping | Server-only Crawl4AI cloud key; scraping also requires model credentials |
 | `PORT` | No | Express port, default `3000` |
 | `HOST` | No | Listening address, default `0.0.0.0`; use loopback where appropriate for native deployment |
@@ -209,7 +199,7 @@ The reasoning dropdown supports `z-ai/glm-5.3-flash`, `z-ai/glm-5.3-flashx`, and
 
 To switch the shared QA/Catalog model through AI Credits, enter `deepseek/deepseek-v4.1-flash` in **Q&A model**, choose **Low**, and start with 32,768 output tokens, 40,000 evidence characters, and temperature 0.1. Validate completeness on representative SKUs before treating this as a tuned profile. This is V4.1 Flash, not a `v4.11` identifier. New runs use the saved model; admitted runs keep their configuration.
 
-**Test Q&A API** and **Test Markdown model** send a short prompt to their displayed model, including unsaved model and DeepSeek effort edits. They do not save settings, retrieve a page, or validate a complete task answer. They use the same server key and can incur provider cost. The remaining limits and QA instructions apply to mapping; Markdown conversion has fixed instructions and a 16,384-token ceiling.
+**Test Q&A API** and **Test Markdown model** send a short prompt to their displayed model, including unsaved model and DeepSeek effort edits. They do not save settings, retrieve a page, or validate a complete task answer. They use the selected workspace owner’s key and can incur provider cost. The remaining limits and QA instructions apply to mapping; Markdown conversion has fixed instructions and a 16,384-token ceiling.
 
 ## Your first review
 
@@ -242,7 +232,7 @@ Use the **QA / Catalog** toggle beside Notifications. A fresh page load defaults
 4. Successful creation opens the parent job in **Jobs**. **Category Subjobs & Files** shows one subjob/template per attribute set, category progress/failures, and exactly one shared shipping workbook. Download prepared files immediately; choose **Run All Categories** to run the parent, or **Run Catalog** on its card to process unfinished rows. SKU, base code, EAN, shipping weight, brand, and product type pass through unchanged, including blank cells. Other empty cells are generated using SAP/page evidence and explicit defaults from the global instructions and category mapping. SAP takes factual precedence; mapping examples are formatting guidance, not product facts. Each run snapshots the shared global instructions, category rules, and fixed headers; later edits do not change an active or historical run.
 5. Inspect generated cells and warnings in **View Results**, then download each set's final `.xlsx` upload file. Uploaded values that conflict with evidence or mapping requirements stay unchanged. Affected cells are highlighted in Jobs and Excel; Excel comments explain the source conflict, missing fact, or mapping requirement. Unknown facts remain blank with cell warnings; malformed or incomplete model responses fail that SKU. All catalog exports preserve these comments, including combined exports after SKU deduplication. Final uploads include only validated rows, report omitted unfinished/failed SKUs per set, and contain exactly the mapped columns without QA or warning columns. Shipping always contains every assigned SKU. Run history selects that run's saved files and schemas; **Current prepared files** shows the most recent prepared snapshot.
 
-After a Catalog run finishes, open **View Results** and click **Images** beside a SKU. The picker uses image URLs in that run's saved Markdown, including its **Product images** gallery. Click images in the desired filename order, then **Save selections**. Deselecting closes gaps; selecting again appends the image. Choices are shared and saved per run, including after reopening the app. New runs start with a fresh selection. **Export Images (.zip)** downloads all saved selections across that run's SKUs as `SKU-1.jpg`, `SKU-2.jpg`, and so on.
+After a Catalog run finishes, open **View Results** and click **Images** beside a SKU. The picker uses image URLs in that run's saved Markdown, including its **Product images** gallery. Click images in the desired filename order, then **Save selections**. Deselecting closes gaps; selecting again appends the image. Choices are private to their workspace and saved per run, including after reopening the app. New runs start with a fresh selection. **Export Images (.zip)** downloads all saved selections across that run's SKUs as `SKU-1.jpg`, `SKU-2.jpg`, and so on.
 
 Previews and downloads use the same 1500 × 1500 white canvas. White/transparent outer margins are trimmed, then the visible content is centered inside a 1200 × 1200 area with at least 150 px padding, preserving proportions. Transparent pixels become white; colored backgrounds remain. This does not perform background removal. The server retrieves only public HTTP(S) raster images from the saved Markdown, checks redirects, and limits each source to 20 MiB. A failed source stops export with an error, preserving the saved choices; no partial ZIP downloads. Keep the tab open during export. Very large jobs can require substantial browser memory.
 
@@ -394,7 +384,7 @@ Dashboard, Scraper URL previews, and durable QA/Catalog jobs share this pipeline
 
 `public URL → Crawl4AI cloud API → DeepSeek Markdown cleanup → product evidence`
 
-Set server-only `CRAWL4AI_API_KEY` and model credentials (`AICREDITS_API_KEY`, or the complete `LLM_BASE_URL`/`LLM_API_KEY` pair). Both configurations are checked before collection. The cloud request follows the [official API reference](https://api.crawl4ai.com/llms.txt): one Bearer-authenticated `POST https://api.crawl4ai.com/scrape` with `{url, format: "both", parse: {media: true}}` to collect Markdown, HTML, and parsed image media together. Proxy and region use the service defaults.. There is no local fallback or automatic cloud retry.
+Set server-only `CRAWL4AI_API_KEY` and the selected workspace’s assigned numbered AI Credits key. Both configurations are checked before collection. The cloud request follows the [official API reference](https://api.crawl4ai.com/llms.txt): one Bearer-authenticated `POST https://api.crawl4ai.com/scrape` with `{url, format: "both", parse: {media: true}}` to collect Markdown, HTML, and parsed image media together. Proxy and region use the service defaults.. There is no local fallback or automatic cloud retry.
 
 The existing `scraperModelName` defaults to `deepseek/deepseek-v4.1-flash` and remains independently editable. Cleanup removes navigation, cookie banners, unrelated promotions, recommendations, and duplicate boilerplate. It preserves source language, product facts, identifiers, specifications, numbers, currencies, variants, tables, and relevant links. Page instructions are treated as untrusted content. Temperature is fixed at `0.1`, with 16,384 output tokens. The selected model gets at most two attempts within 60 seconds; temporary model/network failures can use one backup attempt within the existing 120-second total cleanup deadline. Cleanup enables JSON output mode and validates the internal `{markdown, selectedGalleryIds}` response before accepting it. A single outer JSON code fence is accepted without changing Markdown inside it. DeepSeek cleanup uses the saved DeepSeek effort, defaulting to Low; an explicitly selected GLM still uses Low. Automatic backups use DeepSeek with thinking Off, including when DeepSeek was the primary. Invalid JSON or schema output can use one backup attempt. The same captured Markdown is reused, and evidence records the model that actually succeeded. Configuration, authentication, credit, rate-limit, refusal, and truncation errors do not switch models. Invalid backup output still fails safely and preserves previous evidence. These instructions cannot prove factual preservation; inspect live results.
 
@@ -433,12 +423,12 @@ Run snapshots store evidence, not proof that QA happened. Newly skipped items wi
 
 ### Execution limits
 
-- One SKU executes at a time across the installation.
+- Up to four workspaces execute concurrently; each has one active QA/Catalog/IDQ job and one SKU at a time. Other jobs wait in their workspace’s durable queue.
 - Each SKU has a five-minute budget covering waits, scraping, and retries.
 - QA has at most three total attempts, including at most one corrective retry for invalid answer structure; permanent errors fail immediately.
 - Attempt counts are recorded before dispatch and survive restart.
 - A QA request has a 120-second deadline after admission and the durable attempt checkpoint.
-- QA and admin connectivity tests share two active calls and eight waiting slots per process, with a 60-second queue wait cap.
+- QA, Catalog, IDQ, Markdown cleanup and admin connectivity tests share four active calls and eight waiting slots per process, with a 60-second queue wait cap.
 - Cloud retrieval shares one active slot and eight queued requests across Scraper, Dashboard, and background jobs.
 
 ### Recovery
@@ -453,9 +443,9 @@ Evidence edits increment the catalog revision. An older run retains its historic
 
 ### Cancellation and deletion
 
-Creators can cancel their own runs; admins can cancel any run. Active requests are aborted and committed results are preserved. A queued run may remain `cancelling` until the worker reaches it.
+Workspace owners can cancel their runs, including runs started for them by an admin. Admins select the target workspace to cancel its runs. Queued jobs cancel immediately; running jobs abort active requests while preserving committed results.
 
-Cancel affected runs and wait for them to stop before deleting jobs/SKUs. Job deletion cascades to its run history. Clear All Data removes jobs and catalog rows, not accounts, rules, or provider settings.
+Cancel affected runs and wait for them to stop before deleting jobs/SKUs. Job deletion cascades to its run history. Clear All Data removes QA/Catalog jobs and catalog rows in the selected workspace; it preserves IDQ batches, accounts, shared rules and provider settings.
 
 ## Understanding results and exports
 
@@ -505,11 +495,12 @@ Dashboard's **Export Results** is a separate summary. Its missing/mapping counts
 
 | Capability | User | Admin |
 | --- | --- | --- |
-| Read shared catalog, jobs, rules, history | Yes | Yes |
+| Read catalog, jobs, history | Own workspace | Selected workspace |
+| Read shared rules | Yes | Yes |
 | Import rows and edit evidence | Yes | Yes |
 | Create/edit jobs and start runs | Yes | Yes |
 | Retrieve/preview URLs | Yes | Yes |
-| Cancel runs | Own | Any |
+| Cancel runs | Own workspace | Selected workspace |
 | Delete catalog data/jobs | No | Yes |
 | Change shared rules/instructions/model | No | Yes |
 | Test shared QA provider | No | Yes |
@@ -519,7 +510,7 @@ Passwords use salted scrypt. Random session tokens are stored as hashes in Postg
 
 Account changes revoke that account's sessions. The last administrator with a usable scrypt password cannot be deleted/demoted. Password reset is administrator-managed; no self-service recovery is implemented.
 
-Login throttling is process-local: 10 attempts per socket-address/username key and 100 total attempts per process per 15 minutes, including successes. Behind a proxy the socket address is usually the proxy. This is a known availability/scaling issue, not a recommended public deployment policy.
+Login throttling is process-local: 10 attempts per socket-address/username key and 100 total attempts per process per 15 minutes, counting failed or pending attempts; successful logins release their global count. Behind a proxy the socket address is usually the proxy. This is a known availability/scaling issue, not a recommended public deployment policy.
 
 ## Architecture, storage, and source layout
 
@@ -541,7 +532,7 @@ Login throttling is process-local: 10 attempts per socket-address/username key a
 
 Startup initializes schema through server SQL and Drizzle configuration setup, then verifies required tables/indexes/columns/constraints before listening. Schema errors stop startup. The Drizzle schema also describes tables for tooling; maintain both representations consistently.
 
-There is no checked-in versioned migration history. `db:generate`/`db:push` are developer tools, not the deployed startup mechanism. Do not blindly apply `db:push` to shared production data. Rehearse initialization against a restored backup.
+The workspace upgrade has an explicit transactional migration in `scripts/migrate-workspaces.ts`; other schema setup remains in startup initialization. `db:generate`/`db:push` are developer tools, not the deployed startup mechanism. Do not blindly apply `db:push` to shared production data. Rehearse initialization against a restored backup.
 
 ### Source layout
 
@@ -567,7 +558,7 @@ Dockerfile                   Development, build, production stages
 compose.yaml                 One app container; external PostgreSQL
 ```
 
-Build output is `dist/public` for frontend assets, `dist/server.mjs` for Express, and `dist/bootstrap-admin.mjs` for administrator setup. The server bundle is outside the public directory. Frontend/API use one origin.
+Build output is `dist/public` for frontend assets, `dist/server.mjs` for Express, and `dist/bootstrap-admin.mjs` for administrator setup, plus `dist/migrate-workspaces.mjs` for the explicit workspace migration. The server bundle is outside the public directory. Frontend/API use one origin.
 
 ## API reference
 
@@ -808,17 +799,17 @@ The design fits a modest shared internal tool. There is no measured capacity gua
 | Growth | Limit | Consequence |
 | --- | --- | --- |
 | More catalog/evidence | Full catalog responses and browser rendering | Larger payloads and memory pressure |
-| More jobs/viewers | Each Jobs screen polls all histories plus catalog/jobs every two seconds | Traffic grows with viewers × jobs |
-| More QA work | One globally locked worker, one SKU at a time | Queue backlog and delays behind large jobs |
+| More jobs/viewers | Each Jobs screen polls histories; terminal details are cached and catalog refresh follows progress changes | Traffic grows with viewers × jobs |
+| More QA work | Four active workspaces, one job and SKU at a time per workspace | Queue backlog and delays behind large jobs |
 | Large imports/run starts | Sequential inserts under a shared mutation lock | Unrelated writes wait; database latency compounds |
-| More replicas | Shared worker lock, process-local admission | Still one worker; limits/connections multiply elsewhere |
+| More replicas | Shared worker lock, process-local admission | One scheduler leader; process-local request limits multiply across HTTP replicas |
 | More history | Repeated snapshots/results/rules, no retention | Growing storage and progress payloads |
-| More sign-ins | Global cap counts successes | Valid sign-ins receive 429 |
+| More sign-ins | Process-local failed/pending-attempt caps | Shared proxies can still concentrate traffic |
 | More scraping | One active browser, eight waiting requests | Queue overflow and the VPS resource limit |
 
-Illustration: at an average 30 seconds per SKU, the serial worker needs about **8.3 hours for 1,000 SKUs**, before other jobs. This is arithmetic, not a benchmark. Measure average/p95 service times and arrival rate before committing to capacity.
+Illustration: at 45 seconds per SKU, each workspace needs about **38 minutes for 50 QA SKUs**, before scraping, retries and queued work. Four such workspaces can overlap. This is arithmetic, not a benchmark. Measure average/p95 service times and arrival rate before committing to capacity.
 
-Start with paginated summary APIs, relevant progress polling, bulk/bounded writes, run indexes, and history retention. Use shared admission when adding replicas. Add bounded worker concurrency only after preserving ownership, revision protection, cancellation, and provider budgets. These changes do not require a microservices rewrite.
+Start with paginated summary APIs, relevant progress polling, bulk/bounded writes, run indexes, and history retention. Use shared admission when adding replicas. Increase the current four-workspace limit only after measuring provider quotas, database load and recovery behavior. These changes do not require a microservices rewrite.
 
 ## Troubleshooting
 
@@ -828,7 +819,7 @@ Start with paginated summary APIs, relevant progress polling, bulk/bounded write
 | Production login does not persist | HTTPS and exact origin; Secure cookies do not work through plain HTTP browser access |
 | Mutation returns 403 | Origin, role, proxy behavior |
 | Correct login returns 429 | Global attempt cap or two active password hashes |
-| Provider missing | Both LLM overrides, or neither plus legacy key; restart after env changes |
+| Provider missing | Assigned numbered key slot and account assignment; restart after env changes |
 | Model fails while readiness passes | Model availability, credentials, quota, supported payload |
 | Model connection fails with a hostname/error code | Server DNS, TLS, or outbound connectivity to that hostname; the AI Credits default uses `https://aicredits.in/v1` |
 | Scrape fails | Check both cloud/model keys and credits, saved URL, blocked/login page, rate limit or timeout; inspect scrape error or use SAP/manual evidence |

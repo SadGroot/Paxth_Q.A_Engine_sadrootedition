@@ -1,11 +1,18 @@
 import { useEffect, useState } from 'react';
 import { useSettings, type AppSettings } from '../hooks/useSettings';
 import { useAppContext } from '../context/AppContext';
-import { api } from '../lib/api';
 type TestResult = { modelName: string; purpose: 'qa' | 'scrape'; status: 'testing' | 'passed' | 'failed'; error?: string };
 export function LLMSettingsModule() {
-  const { settings, saveSettings, isMemoryLoading, memoryError } = useSettings();
-  const { user, addNotification } = useAppContext();
+  const { user } = useAppContext();
+  const [scope, setScope] = useState<'workspace' | 'global'>('workspace');
+  return <div className="flex-1 overflow-auto">{user?.role === 'admin' ? <label className="block px-8 pt-6">Settings scope
+    <select aria-label="Settings scope" className="border p-2 ml-3" value={scope} onChange={e => setScope(e.target.value as typeof scope)}>
+      <option value="workspace">Selected workspace</option><option value="global">Global defaults</option>
+    </select></label> : <p className="px-8 pt-6 text-sm">Your workspace model settings are managed by an administrator.</p>}<SettingsForm key={scope} scope={scope} /></div>;
+}
+function SettingsForm({ scope }: { scope: 'workspace' | 'global' }) {
+  const { user, addNotification, request: api, workspaceId, workspaceSignal } = useAppContext();
+  const { settings, saveSettings, resetOverrides, isMemoryLoading, memoryError } = useSettings(scope === 'workspace' ? workspaceId : undefined, api);
   const [draft, setDraft] = useState(settings);
   const [dirty, setDirty] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -37,13 +44,13 @@ export function LLMSettingsModule() {
           message: `${modelName}: ${result.status === 'passed' ? 'API connection confirmed.' : result.error}`,
         });
       }
-      else { await saveSettings(draft); setDirty(false); setMessage('Settings saved for everyone.'); }
+      else { await saveSettings(draft); setDirty(false); setMessage(scope === 'workspace' ? 'Workspace overrides saved. New runs will use these settings.' : 'Global defaults saved. Workspaces with overrides keep their settings.'); }
     }
     catch (error) { setMessage((error as Error).message); } finally { setBusy(false); }
   };
   return <section className="flex-1 overflow-auto p-8 bg-[#FDFCFB]">
     <h2 className="text-2xl font-serif mb-4">LLM Settings</h2>
-    <p className="mb-4">Provider credentials are configured on the server. {settings.providerConfigured ? 'Provider configured.' : 'Server provider credentials are missing.'}</p>
+    <p className="mb-4">{scope === 'workspace' ? `Assigned key slot: ${settings.providerKeySlot || 'unassigned'}. ` : 'Tests use the selected workspace’s key. '}Provider credentials are configured on the server. {settings.providerConfigured ? 'Provider configured.' : 'Server provider credentials are missing.'}</p>
     <p className="mb-4 text-sm">{settings.scraperConfigured ? 'Crawl4AI configured.' : 'Crawl4AI key is missing on the server.'} Scraping requires both Crawl4AI and model credentials. Each model test checks the displayed model without saving changes. Test URL in Scraper checks retrieval and Markdown cleanup together.</p>
     {(message || memoryError) && <p role="status" className="mb-4">{message || memoryError}</p>}
     {testResult && <p role="status" className="mb-2">{testResult.purpose === 'scrape' ? 'Scraping' : 'Q&A'} ({testResult.modelName}): {testResult.status === 'testing' ? 'Testing…' : testResult.status === 'passed' ? 'Passed.' : `Failed: ${testResult.error}`}</p>}
@@ -65,7 +72,10 @@ export function LLMSettingsModule() {
       <p id="reasoning-help" className="text-sm">{isDeepSeek ? 'Low is recommended for QA. Medium maps to High. Temperature has no effect while thinking is enabled. Auto uses Low for Q&A and Off for Catalog, IDQ, and cleanup. Temporary failures can retry with thinking off.' : isGlm ? 'Applies to GLM 5.3 Flash and FlashX for Q&A and Catalog. Low is recommended.' : 'No reasoning override for this model; provider defaults apply.'} High and Max can take longer and hit provider time limits.</p>
       {([['temperature', 'Temperature', 0, 1, 0.1], ['maxTokens', 'Maximum output tokens', 1, 65536, 1], ['maxPageContentLength', 'Maximum evidence characters', 1, 200000, 1]] as const).map(([key, label, min, max, step]) => <label className="block" key={key}>{label}<input className="block border p-2" type="number" min={min} max={max} step={step} value={draft[key]} onChange={e => change(key, Number(e.target.value))} /></label>)}
       <p className="text-sm">Recommended starting profile for DeepSeek V4.1 Flash: 32,768 output tokens, 40,000 evidence characters, temperature 0.1, and Low reasoning. The evidence limit applies only to product-page Markdown. QA processes one SKU at a time and saves its result before starting the next. Saving settings applies to new runs.</p>
-      <label className="block">Shared QA / Catalog instructions<textarea className="block border p-2 w-full" rows={14} value={draft.qaAgentMemory} onChange={e => change('qaAgentMemory', e.target.value)} /></label>
+      {scope === 'global' && <label className="block">Shared QA / Catalog instructions<textarea className="block border p-2 w-full" rows={14} value={draft.qaAgentMemory} onChange={e => change('qaAgentMemory', e.target.value)} /></label>}
+      {scope === 'workspace' && <button className="border px-4 py-2 mr-4" onClick={async () => {
+        setBusy(true); try { await resetOverrides(); setDirty(false); setMessage('Workspace now follows global defaults.'); } catch (error) { setMessage((error as Error).message); } finally { setBusy(false); }
+      }}>Use global defaults</button>}
       <button className="bg-black text-white px-4 py-2 mr-4" onClick={() => void act()}>Save changes</button>
     </fieldset>
   </section>;

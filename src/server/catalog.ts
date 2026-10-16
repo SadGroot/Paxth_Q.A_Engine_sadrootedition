@@ -35,12 +35,12 @@ export function validateCatalogImport(items: unknown, mode: unknown = 'qa'): ass
     requireInput(!Object.hasOwn(item.raw_row, 'catalog_state') && !Object.hasOwn(item, 'catalog_state'), 'Catalog results are written by the server; remove catalog_state before importing.');
     requireInput(item.attribute_set === undefined || typeof item.attribute_set === 'string', 'Invalid attribute set');
     requireInput(item.status === undefined || ['pending','ready','cannot_qa'].includes(item.status), 'Imports must contain unprocessed SKUs');
-    requireInput(!['qa_result','export_data','tokensUsed','last_job_id'].some(key => key in item), 'QA results are written by the server');
+    requireInput(!['owner_id','ownerId','workspaceId','qa_result','export_data','tokensUsed','last_job_id'].some(key => key in item), 'QA results are written by the server');
   }
 }
 export function validateJob(value: any) {
   requireInput(object(value) && identifier(value.id) && identifier(value.name) && skuIds(value.skus), 'A job needs an ID, name, and unique non-empty SKU identifiers');
-  requireInput(!['catalog_outputs', 'catalogOutputs', 'attributeSets'].some(key => Object.hasOwn(value, key)), 'Catalog outputs and attribute-set summaries are written by the server');
+  requireInput(!['owner_id', 'ownerId', 'workspaceId', 'catalog_outputs', 'catalogOutputs', 'attributeSets'].some(key => Object.hasOwn(value, key)), 'Catalog outputs and attribute-set summaries are written by the server');
   requireInput(value.attribute_set === undefined || typeof value.attribute_set === 'string', 'Invalid attribute set');
   requireInput(value.jobType === undefined || ['qa','catalog'].includes(value.jobType), 'Job type must be qa or catalog');
   requireInput(value.status === undefined || value.status === 'pending', 'New jobs must be pending');
@@ -84,10 +84,10 @@ export async function prepareJobCatalogOutputs(client: PoolClient, rows: any[], 
   catch (error) { throw new ApiError(400, (error as Error).message); }
 }
 
-async function ensureIdle(client: PoolClient, jobIds?: string[], skus?: string[]) {
+async function ensureIdle(client: PoolClient, ownerId: string, jobIds?: string[], skus?: string[]) {
   const { rows } = await client.query(`SELECT 1 FROM job_runs r JOIN jobs j ON j.id=r.job_id
-    WHERE r.status IN ('queued','running','cancelling') AND
-    ($1::text[] IS NULL OR j.id=ANY($1)) AND ($2::text[] IS NULL OR j.skus ?| $2) LIMIT 1`, [jobIds ?? null, skus ?? null]);
+    WHERE j.owner_id=$3 AND r.status IN ('queued','running','cancelling') AND
+    ($1::text[] IS NULL OR j.id=ANY($1)) AND ($2::text[] IS NULL OR j.skus ?| $2) LIMIT 1`, [jobIds ?? null, skus ?? null, ownerId]);
   if (rows.length) throw new ApiError(409, 'Cancel active runs and wait for them to stop before deleting or changing this job');
 }
 
@@ -98,22 +98,22 @@ export function scrapedMetadata(result: ScrapedPage) {
 }
 
 /** Called within the existing mutation transaction by HTTP retrieval and durable jobs. */
-export async function saveScrapedEvidence(client: PoolClient, sku: string, revision: number, result: ScrapedPage, id?: number) {
+export async function saveScrapedEvidence(client: PoolClient, sku: string, revision: number, result: ScrapedPage, ownerId: string, id?: number) {
   const metadata = scrapedMetadata(result);
   const { rows: [row] } = await client.query(`UPDATE sku_data SET scraped_markdown=$3,scrape_metadata=$4,
     scrape_status='success',scrape_error=NULL,status='ready',error=NULL,revision=revision+1
-    WHERE sku=$1 AND revision=$2 AND ($5::integer IS NULL OR id=$5) RETURNING *`, [sku, revision, result.markdown, JSON.stringify(metadata), id ?? null]);
+    WHERE sku=$1 AND revision=$2 AND ($5::integer IS NULL OR id=$5) AND owner_id=$6 RETURNING *`, [sku, revision, result.markdown, JSON.stringify(metadata), id, ownerId]);
   return row;
 }
 
-export async function saveScrapeFailure(client: PoolClient, sku: string, revision: number, error: string, id?: number) {
+export async function saveScrapeFailure(client: PoolClient, sku: string, revision: number, error: string, ownerId: string, id?: number) {
   const { rows: [row] } = await client.query(`UPDATE sku_data SET scrape_status='failed',scrape_error=$3
-    WHERE sku=$1 AND revision=$2 AND ($4::integer IS NULL OR id=$4) RETURNING *`, [sku, revision, error, id ?? null]);
+    WHERE sku=$1 AND revision=$2 AND ($4::integer IS NULL OR id=$4) AND owner_id=$5 RETURNING *`, [sku, revision, error, id, ownerId]);
   return row;
 }
 
 export function registerCatalogRoutes(app: Express, pool: Pool, scrape = scrapeProductPage) {
-  app.get('/api/catalog', async (_req, res) => res.json((await pool.query('SELECT * FROM sku_data ORDER BY id')).rows.map(mapCatalogRow)));
+  app.get('/api/catalog', async (_req, res) => res.json((await pool.query('SELECT * FROM sku_data WHERE owner_id=$1 ORDER BY id', [res.locals.workspaceId])).rows.map(mapCatalogRow)));
   app.post('/api/catalog', async (req, res) => {
     validateCatalogImport(req.body, req.query.mode);
     const result = await transaction(pool, async client => {
@@ -122,10 +122,10 @@ export function registerCatalogRoutes(app: Express, pool: Pool, scrape = scrapeP
         const source = req.query.mode === 'catalog' ? { ...item.source,
           sap: String(item.raw_row.attributes__sap ?? ''), url: String(item.raw_row.attributes__url ?? '') } : item.source;
         const attributeSet = req.query.mode === 'catalog' ? String(item.raw_row.attributes__attribute_set ?? '') : item.attribute_set;
-        const result = await client.query(`INSERT INTO sku_data (sku,upload_attributes,source,raw_row,status,attribute_set)
-          VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT (sku) DO NOTHING RETURNING *`,
+        const result = await client.query(`INSERT INTO sku_data (sku,upload_attributes,source,raw_row,status,attribute_set,owner_id)
+          VALUES ($1,$2,$3,$4,$5,$6,$7) ON CONFLICT (owner_id,sku) DO NOTHING RETURNING *`,
         [item.sku, JSON.stringify(item.upload_attributes), JSON.stringify(source), JSON.stringify(item.raw_row),
-          req.query.mode === 'catalog' ? source.sap || source.url ? 'ready' : 'cannot_qa' : item.status || 'pending', attributeSet || null]);
+          req.query.mode === 'catalog' ? source.sap || source.url ? 'ready' : 'cannot_qa' : item.status || 'pending', attributeSet || null, res.locals.workspaceId]);
         if (result.rows.length) inserted.push(mapCatalogRow(result.rows[0])); else skipped.push(item.sku);
       }
       return { inserted, skipped };
@@ -143,7 +143,7 @@ export function registerCatalogRoutes(app: Express, pool: Pool, scrape = scrapeP
     if (item.scrape_status !== undefined) requireInput(['success','failed','skipped_no_url'].includes(item.scrape_status), 'Invalid scrape status');
     if (item.status !== undefined) requireInput(['pending','ready','cannot_qa'].includes(item.status), 'Execution status is controlled by the server');
     const saved = await transaction(pool, async client => {
-      const current = (await client.query('SELECT * FROM sku_data WHERE sku=$1 FOR UPDATE', [req.params.sku])).rows[0];
+      const current = (await client.query('SELECT * FROM sku_data WHERE sku=$1 AND owner_id=$2 FOR UPDATE', [req.params.sku, res.locals.workspaceId])).rows[0];
       if (!current) throw new ApiError(404, 'SKU not found');
       if (current.revision !== expectedRevision) throw new ApiError(409, 'SKU evidence changed. Refresh the catalog before saving.');
       if (item.source && !current.scrape_metadata && current.scraped_markdown?.trim()) {
@@ -159,12 +159,12 @@ export function registerCatalogRoutes(app: Express, pool: Pool, scrape = scrapeP
       item.status = unprocessedStatus(next);
       item.error = null;
       const columns: Record<string, string> = { ...fields, scrape_metadata: 'scrape_metadata', scrape_error: 'scrape_error' };
-      const values: any[] = [req.params.sku, expectedRevision];
+      const values: any[] = [req.params.sku, expectedRevision, res.locals.workspaceId];
       const assignments = Object.entries(item).map(([key,value]) => {
         values.push(object(value) ? JSON.stringify(value) : value);
         return `${columns[key]}=$${values.length}`;
       });
-      const result = await client.query(`UPDATE sku_data SET ${assignments.join(',')}, revision=revision+1 WHERE sku=$1 AND revision=$2 RETURNING *`, values);
+      const result = await client.query(`UPDATE sku_data SET ${assignments.join(',')}, revision=revision+1 WHERE sku=$1 AND revision=$2 AND owner_id=$3 RETURNING *`, values);
       if (!result.rows.length) throw new ApiError(404, 'SKU not found');
       return mapCatalogRow(result.rows[0]);
     });
@@ -177,20 +177,20 @@ export function registerCatalogRoutes(app: Express, pool: Pool, scrape = scrapeP
     try {
       requireInput(object(req.body) && Object.keys(req.body).length === 1 && Number.isSafeInteger(req.body.expectedRevision) && req.body.expectedRevision >= 0, 'Only expectedRevision is accepted');
       const sku = String(req.params.sku), revision = req.body.expectedRevision;
-      const { rows: [current] } = await pool.query('SELECT * FROM sku_data WHERE sku=$1', [sku]);
+      const { rows: [current] } = await pool.query('SELECT * FROM sku_data WHERE sku=$1 AND owner_id=$2', [sku, res.locals.workspaceId]);
       if (!current) throw new ApiError(404, 'SKU not found');
       if (current.revision !== revision) throw new ApiError(409, 'SKU evidence changed. Refresh the catalog before scraping.');
       const { url } = validateScrapeInput({ url: current.source?.url });
       let result: ScrapedPage;
-      try { result = await scrape(url, controller.signal, await getProviderSettings(pool)); }
+      try { result = await scrape(url, controller.signal, await getProviderSettings(pool, res.locals.workspaceId)); }
       catch (error) {
         if (controller.signal.aborted || error instanceof ScrapeError && error.code === 'CANCELLED') throw error;
         await transaction(pool, async client => {
           controller.signal.throwIfAborted();
-          const saved = await saveScrapeFailure(client, sku, revision, error instanceof ScrapeError ? error.message : 'Failed to retrieve product content.', current.id);
+          const saved = await saveScrapeFailure(client, sku, revision, error instanceof ScrapeError ? error.message : 'Failed to retrieve product content.', res.locals.workspaceId, current.id);
           controller.signal.throwIfAborted();
           if (!saved) {
-            if (!(await client.query('SELECT 1 FROM sku_data WHERE sku=$1', [sku])).rowCount) throw new ApiError(404, 'SKU was deleted during retrieval.');
+            if (!(await client.query('SELECT 1 FROM sku_data WHERE sku=$1 AND owner_id=$2', [sku, res.locals.workspaceId])).rowCount) throw new ApiError(404, 'SKU was deleted during retrieval.');
             throw new ApiError(409, 'SKU changed during retrieval. Refresh the catalog.');
           }
         });
@@ -199,10 +199,10 @@ export function registerCatalogRoutes(app: Express, pool: Pool, scrape = scrapeP
       controller.signal.throwIfAborted();
       const saved = await transaction(pool, async client => {
         controller.signal.throwIfAborted();
-        const row = await saveScrapedEvidence(client, sku, revision, result, current.id);
+        const row = await saveScrapedEvidence(client, sku, revision, result, res.locals.workspaceId, current.id);
         controller.signal.throwIfAborted();
         if (!row) {
-          if (!(await client.query('SELECT 1 FROM sku_data WHERE sku=$1', [sku])).rowCount) throw new ApiError(404, 'SKU was deleted during retrieval.');
+          if (!(await client.query('SELECT 1 FROM sku_data WHERE sku=$1 AND owner_id=$2', [sku, res.locals.workspaceId])).rowCount) throw new ApiError(404, 'SKU was deleted during retrieval.');
           throw new ApiError(409, 'SKU changed during retrieval. The result was not attached; refresh the catalog.');
         }
         return mapCatalogRow(row);
@@ -219,24 +219,24 @@ export function registerCatalogRoutes(app: Express, pool: Pool, scrape = scrapeP
   app.delete('/api/catalog', async (req, res) => {
     requireInput(req.body?.all === true || skuIds(req.body?.skus), 'Specify SKUs or all:true');
     await transaction(pool, async client => {
-      await ensureIdle(client, undefined, req.body.all ? undefined : req.body.skus);
-      await client.query('DELETE FROM sku_data WHERE $1::text[] IS NULL OR sku=ANY($1)', [req.body.all ? null : req.body.skus]);
+      await ensureIdle(client, res.locals.workspaceId, undefined, req.body.all ? undefined : req.body.skus);
+      await client.query('DELETE FROM sku_data WHERE ($1::text[] IS NULL OR sku=ANY($1)) AND owner_id=$2', [req.body.all ? null : req.body.skus, res.locals.workspaceId]);
     });
     res.json({ success:true });
   });
   app.delete('/api/data', async (_req, res) => {
     await transaction(pool, async client => {
-      await ensureIdle(client);
-      await client.query('DELETE FROM jobs');
-      await client.query('DELETE FROM sku_data');
+      await ensureIdle(client, res.locals.workspaceId);
+      await client.query('DELETE FROM jobs WHERE owner_id=$1', [res.locals.workspaceId]);
+      await client.query('DELETE FROM sku_data WHERE owner_id=$1', [res.locals.workspaceId]);
     });
     res.json({ success:true });
   });
   app.get('/api/jobs', async (_req, res) => res.json((await pool.query(`SELECT id,name,created_at,attribute_set,skus,status,
     tokens_used,time_taken,error,job_type,jsonb_path_query_array(catalog_outputs,'$.groups[*].attributeSet') AS attribute_sets
-    FROM jobs ORDER BY created_at,id`)).rows.map(mapJobRow)));
+    FROM jobs WHERE owner_id=$1 ORDER BY created_at,id`, [res.locals.workspaceId])).rows.map(mapJobRow)));
   app.get('/api/jobs/:id/outputs', async (req, res) => {
-    const { rows: [job] } = await pool.query('SELECT job_type,catalog_outputs FROM jobs WHERE id=$1', [req.params.id]);
+    const { rows: [job] } = await pool.query('SELECT job_type,catalog_outputs FROM jobs WHERE id=$1 AND owner_id=$2', [req.params.id, res.locals.workspaceId]);
     if (!job) throw new ApiError(404, 'Job not found');
     requireInput(job.job_type === 'catalog', 'Prepared files are available only for Catalog jobs');
     res.json(job.catalog_outputs || { groups: [], shipping: null, shippingError: 'Shipping file unavailable: this older job has no prepared files. Run Catalog to prepare its available templates.' });
@@ -248,15 +248,15 @@ export function registerCatalogRoutes(app: Express, pool: Pool, scrape = scrapeP
     const saved = await transaction(pool, async client => {
       const rows: any[] = [];
       for (const item of items) {
-        const existing = await client.query('SELECT * FROM sku_data WHERE sku=ANY($1)', [item.skus]);
+        const existing = await client.query('SELECT * FROM sku_data WHERE sku=ANY($1) AND owner_id=$2', [item.skus, res.locals.workspaceId]);
         requireInput(existing.rows.length === item.skus.length, 'Every job SKU must exist in the catalog');
         requireInput(existing.rows.every(row => row.source?.sap?.trim() || row.source?.url?.trim() || usableScrapedMarkdown(row)), 'Every job SKU needs SAP, usable page evidence, or a source URL');
         const bySku = new Map(existing.rows.map(row => [row.sku, row]));
         const ordered = item.skus.map((sku: string) => bySku.get(sku));
         const prepared = item.jobType === 'catalog' ? await prepareJobCatalogOutputs(client, ordered) : undefined;
         const attributeSet = prepared ? prepared.mappings.length === 1 ? prepared.mappings[0].attributeSet : null : item.attribute_set || null;
-        const result = await client.query(`INSERT INTO jobs (id,name,created_at,attribute_set,skus,status,job_type,catalog_outputs)
-          VALUES ($1,$2,$3,$4,$5,'pending',$6,$7) RETURNING *`, [item.id,item.name,new Date().toISOString(),attributeSet,JSON.stringify(item.skus),item.jobType || 'qa',prepared ? JSON.stringify(prepared.outputs) : null]);
+        const result = await client.query(`INSERT INTO jobs (id,name,created_at,attribute_set,skus,status,job_type,catalog_outputs,owner_id)
+          VALUES ($1,$2,$3,$4,$5,'pending',$6,$7,$8) RETURNING *`, [item.id,item.name,new Date().toISOString(),attributeSet,JSON.stringify(item.skus),item.jobType || 'qa',prepared ? JSON.stringify(prepared.outputs) : null,res.locals.workspaceId]);
         rows.push(mapJobRow(result.rows[0]));
       }
       return rows;
@@ -266,28 +266,28 @@ export function registerCatalogRoutes(app: Express, pool: Pool, scrape = scrapeP
   app.put('/api/jobs/:id', async (req, res) => {
     requireInput(object(req.body) && Object.keys(req.body).length > 0 && Object.keys(req.body).every(key => ['name','skus','attribute_set'].includes(key)), 'Only job name, SKUs, and attribute set can be edited');
     const saved = await transaction(pool, async client => {
-      await ensureIdle(client, [String(req.params.id)]);
-      const current = (await client.query('SELECT * FROM jobs WHERE id=$1', [req.params.id])).rows[0];
+      await ensureIdle(client, res.locals.workspaceId, [String(req.params.id)]);
+      const current = (await client.query('SELECT * FROM jobs WHERE id=$1 AND owner_id=$2', [req.params.id, res.locals.workspaceId])).rows[0];
       if (!current) throw new ApiError(404, 'Job not found');
       const next = { ...mapJobRow(current), ...req.body, status:'pending' };
       const { attributeSets: _summary, ...jobInput } = next;
       validateJob(jobInput);
-      const existing = await client.query('SELECT * FROM sku_data WHERE sku=ANY($1)', [next.skus]);
+      const existing = await client.query('SELECT * FROM sku_data WHERE sku=ANY($1) AND owner_id=$2', [next.skus, res.locals.workspaceId]);
       requireInput(existing.rows.length === next.skus.length, 'Every job SKU must exist in the catalog');
       const bySku = new Map(existing.rows.map(row => [row.sku, row]));
       const prepared = next.jobType === 'catalog' && req.body.skus !== undefined
         ? await prepareJobCatalogOutputs(client, next.skus.map((sku: string) => bySku.get(sku))) : undefined;
       const outputs = prepared?.outputs || current.catalog_outputs;
       const attributeSet = prepared ? prepared.mappings.length === 1 ? prepared.mappings[0].attributeSet : null : current.job_type === 'catalog' ? current.attribute_set : next.attribute_set;
-      const result = await client.query("UPDATE jobs SET name=$2,skus=$3,attribute_set=$4,catalog_outputs=$5,status='pending' WHERE id=$1 RETURNING *", [next.id,next.name,JSON.stringify(next.skus),attributeSet,outputs ? JSON.stringify(outputs) : null]);
+      const result = await client.query("UPDATE jobs SET name=$2,skus=$3,attribute_set=$4,catalog_outputs=$5,status='pending' WHERE id=$1 AND owner_id=$6 RETURNING *", [next.id,next.name,JSON.stringify(next.skus),attributeSet,outputs ? JSON.stringify(outputs) : null,res.locals.workspaceId]);
       return mapJobRow(result.rows[0]);
     });
     res.json(saved);
   });
   app.delete('/api/jobs/:id', async (req, res) => {
     await transaction(pool, async client => {
-      await ensureIdle(client, [String(req.params.id)]);
-      const result = await client.query('DELETE FROM jobs WHERE id=$1 RETURNING id', [req.params.id]);
+      await ensureIdle(client, res.locals.workspaceId, [String(req.params.id)]);
+      const result = await client.query('DELETE FROM jobs WHERE id=$1 AND owner_id=$2 RETURNING id', [req.params.id, res.locals.workspaceId]);
       if (!result.rows.length) throw new ApiError(404, 'Job not found');
     });
     res.json({ success:true });
@@ -295,8 +295,8 @@ export function registerCatalogRoutes(app: Express, pool: Pool, scrape = scrapeP
   app.delete('/api/jobs', async (req, res) => {
     requireInput(req.body?.all === true || skuIds(req.body?.ids), 'Specify job IDs or all:true');
     await transaction(pool, async client => {
-      await ensureIdle(client, req.body.all ? undefined : req.body.ids);
-      await client.query('DELETE FROM jobs WHERE $1::text[] IS NULL OR id=ANY($1)', [req.body.all ? null : req.body.ids]);
+      await ensureIdle(client, res.locals.workspaceId, req.body.all ? undefined : req.body.ids);
+      await client.query('DELETE FROM jobs WHERE ($1::text[] IS NULL OR id=ANY($1)) AND owner_id=$2', [req.body.all ? null : req.body.ids, res.locals.workspaceId]);
     });
     res.json({ success:true });
   });

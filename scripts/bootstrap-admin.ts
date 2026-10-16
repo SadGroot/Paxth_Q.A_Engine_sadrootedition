@@ -1,3 +1,4 @@
+import { assignKeySlot } from '../src/server/workspaces.ts';
 import 'dotenv/config';
 import { randomUUID } from 'node:crypto';
 import { Pool } from 'pg';
@@ -7,8 +8,8 @@ import { hashPassword, initializeAuth } from '../src/server/auth.ts';
 // Recovery is explicit and only permitted when no administrator has a usable scrypt hash.
 const recoverLegacy = process.argv.includes('--recover-legacy');
 if (process.argv.slice(2).some(value => value !== '--recover-legacy')) throw new Error('Only --recover-legacy is supported.');
-const username = (process.env.BOOTSTRAP_ADMIN_USERNAME ?? 'Aswath').trim();
-const password = process.env.BOOTSTRAP_ADMIN_PASSWORD ?? 'potusdown@2230';
+const username = (process.env.BOOTSTRAP_ADMIN_USERNAME ?? '').trim();
+const password = process.env.BOOTSTRAP_ADMIN_PASSWORD ?? '';
 if (!process.env.DATABASE_URL || !username || username.length > 100 || /[\x00-\x1f\x7f]/.test(username) || !password) {
   throw new Error('Set DATABASE_URL, BOOTSTRAP_ADMIN_USERNAME and BOOTSTRAP_ADMIN_PASSWORD (12–256 characters).');
 }
@@ -26,11 +27,13 @@ try {
       throw new Error('An administrator exists. Use account management, or --recover-legacy only if all admin passwords are legacy plaintext.');
     }
     const existing = (await client.query('SELECT id FROM users WHERE lower(btrim(username)) = lower($1)', [username])).rows[0];
+    const accountId = existing?.id ?? randomUUID();
+    await assignKeySlot(client, accountId);
     if (existing && recoverLegacy) {
       await client.query("UPDATE users SET password = $2, role = 'admin' WHERE id = $1", [existing.id, hashed]);
       await client.query('DELETE FROM sessions WHERE user_id = $1', [existing.id]);
     } else {
-      await client.query("INSERT INTO users (id, username, password, role) VALUES ($1, $2, $3, 'admin')", [randomUUID(), username, hashed]);
+      await client.query("INSERT INTO users (id, username, password, role) VALUES ($1, $2, $3, 'admin')", [accountId, username, hashed]);
     }
     await client.query('COMMIT');
     console.log('Administrator created. Remove bootstrap credentials from the environment.');

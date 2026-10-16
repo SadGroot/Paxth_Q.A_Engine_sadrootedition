@@ -45,7 +45,7 @@ export interface SkuData {
   catalog_state?: CatalogState | null;
 }
 
-export function useCatalogData(enabled = true, sessionKey?: string) {
+export function useCatalogData(enabled = true, sessionKey?: string, request: typeof api = api) {
   const [skuDataList, setSkuDataList] = useState<SkuData[]>([]);
   const [isLoading, setIsLoading] = useState(enabled);
   const [catalogError, setCatalogError] = useState("");
@@ -54,9 +54,9 @@ export function useCatalogData(enabled = true, sessionKey?: string) {
   const refreshCatalog = useCallback(async () => {
     if (!enabled) return;
     const current = generation.current;
-    const request = ++refreshSerial.current;
-    const rows = await api<SkuData[]>('/api/catalog');
-    if (current === generation.current && request === refreshSerial.current) {
+    const serial = ++refreshSerial.current;
+    const rows = await request<SkuData[]>('/api/catalog');
+    if (current === generation.current && serial === refreshSerial.current) {
       setSkuDataList(previous => {
         const known = new Map(previous.map(row => [row.sku, row]));
         return rows.map(row => {
@@ -66,12 +66,13 @@ export function useCatalogData(enabled = true, sessionKey?: string) {
       });
       setCatalogError("");
     }
-  }, [enabled, sessionKey]);
-  const resetCatalog = useCallback(() => { generation.current++; setSkuDataList([]); }, []);
+  }, [enabled, sessionKey, request]);
+  const resetCatalog = useCallback(() => { generation.current++; setSkuDataList([]); }, [request]);
   useEffect(() => {
     generation.current++;
     if (!enabled) { setSkuDataList([]); setCatalogError(""); setIsLoading(false); return; }
     let active = true;
+    setSkuDataList([]); setCatalogError("");
     setIsLoading(true);
     refreshCatalog().catch(error => { if (active) setCatalogError(error.message); })
       .finally(() => { if (active) setIsLoading(false); });
@@ -81,7 +82,7 @@ export function useCatalogData(enabled = true, sessionKey?: string) {
   const addParsedData = useCallback(async (data: SkuData[], mode: JobType = 'qa') => {
     const current = generation.current;
     try {
-      const result = await api<{inserted: SkuData[]; skipped: string[]}>(mode === 'catalog' ? '/api/catalog?mode=catalog' : '/api/catalog', { method:'POST', body:JSON.stringify(data) });
+      const result = await request<{inserted: SkuData[]; skipped: string[]}>(mode === 'catalog' ? '/api/catalog?mode=catalog' : '/api/catalog', { method:'POST', body:JSON.stringify(data) });
       if (current !== generation.current) return null;
       refreshSerial.current++;
       setSkuDataList(previous => {
@@ -92,12 +93,12 @@ export function useCatalogData(enabled = true, sessionKey?: string) {
       setCatalogError("");
       return result;
     } catch (error) { if (current === generation.current) setCatalogError((error as Error).message); return null; }
-  }, []);
+  }, [request]);
   const updateSku = useCallback(async (sku: string, updates: Partial<SkuData>, expectedRevision?: number): Promise<boolean> => {
     const current = generation.current;
     try {
       const revision = expectedRevision ?? skuDataList.find(item => item.sku === sku)?.revision ?? 0;
-      const saved = await api<SkuData>(`/api/catalog/${encodeURIComponent(sku)}`, { method:'PUT', body:JSON.stringify({...updates, expectedRevision: revision}) });
+      const saved = await request<SkuData>(`/api/catalog/${encodeURIComponent(sku)}`, { method:'PUT', body:JSON.stringify({...updates, expectedRevision: revision}) });
       if (current !== generation.current) return false;
       refreshSerial.current++;
       setSkuDataList(previous => previous.map(item => item.sku === sku && (saved.revision ?? 0) > (item.revision ?? 0) ? saved : item));
@@ -108,11 +109,11 @@ export function useCatalogData(enabled = true, sessionKey?: string) {
       if (current === generation.current) setCatalogError((error as Error).message);
       return false;
     }
-  }, [skuDataList, refreshCatalog]);
+  }, [skuDataList, refreshCatalog, request]);
   const scrapeSku = useCallback(async (sku: SkuData, signal?: AbortSignal): Promise<SkuData> => {
     const current = generation.current;
     try {
-      const saved = await scrapeCatalogSku(sku, signal);
+      const saved = await scrapeCatalogSku(sku, signal, request);
       if (current === generation.current) {
         refreshSerial.current++;
         setSkuDataList(previous => previous.map(item => item.sku === saved.sku && (saved.revision ?? 0) > (item.revision ?? 0) ? saved : item));
@@ -124,18 +125,18 @@ export function useCatalogData(enabled = true, sessionKey?: string) {
       if (current === generation.current && !signal?.aborted) setCatalogError((error as Error).message);
       throw error;
     }
-  }, [refreshCatalog]);
+  }, [refreshCatalog, request]);
   const removeSkus = useCallback(async (skus: string[]) => {
     const current = generation.current;
     try {
-      await api('/api/catalog', { method:'DELETE', body:JSON.stringify({skus}) });
+      await request('/api/catalog', { method:'DELETE', body:JSON.stringify({skus}) });
       if (current !== generation.current) return false;
       refreshSerial.current++;
       setSkuDataList(previous => previous.filter(item => !skus.includes(item.sku)));
       setCatalogError("");
       return true;
     } catch (error) { if (current === generation.current) setCatalogError((error as Error).message); return false; }
-  }, []);
+  }, [request]);
   const ingestSkuFile = useCallback(async (sku: SkuData, file: File): Promise<SkuData> => {
     const current = generation.current;
     try {
@@ -149,7 +150,7 @@ export function useCatalogData(enabled = true, sessionKey?: string) {
         reader.readAsDataURL(file);
       });
       if (current !== generation.current) throw new Error('Your session changed. Select the file again.');
-      const saved = await api<SkuData>(`/api/catalog/${encodeURIComponent(sku.sku)}/ingest`, {
+      const saved = await request<SkuData>(`/api/catalog/${encodeURIComponent(sku.sku)}/ingest`, {
         method: 'POST', body: JSON.stringify({ expectedRevision: sku.revision ?? 0, fileName: file.name, dataBase64 }),
       });
       if (current === generation.current) {
@@ -165,6 +166,6 @@ export function useCatalogData(enabled = true, sessionKey?: string) {
       }
       throw error;
     }
-  }, [refreshCatalog]);
+  }, [refreshCatalog, request]);
   return { skuDataList, addParsedData, updateSku, scrapeSku, ingestSkuFile, removeSkus, resetCatalog, refreshCatalog, isLoading, catalogError };
 }

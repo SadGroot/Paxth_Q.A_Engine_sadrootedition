@@ -22,7 +22,7 @@ import { IDQModule } from './components/IDQModule';
 type ModuleType = 'dashboard' | 'scraper' | 'attribute-sets' | 'jobs' | 'idq' | 'llm-settings' | 'users';
 
 function MainLayout() {
-  const { user, sessionLoading, workspaceMode, setWorkspaceMode } = useAppContext();
+  const { user, sessionLoading, workspaceMode, setWorkspaceMode, workspaceId, setWorkspaceId, usersList } = useAppContext();
   const [activeModule, setActiveModule] = useState<ModuleType>('dashboard');
   const [createdCatalogJobId, setCreatedCatalogJobId] = useState<string>();
   const [dbStatus, setDbStatus] = useState<'checking' | 'connected' | 'disconnected' | 'error'>('checking');
@@ -65,7 +65,7 @@ function MainLayout() {
     { id: 'attribute-sets', label: 'Attribute Sets' },
     { id: 'jobs', label: 'Jobs' },
     { id: 'idq', label: 'IDQ' },
-    ...(isSystemAdmin ? [{ id: 'llm-settings', label: 'LLM Settings', adminOnly: true }] : []),
+    { id: 'llm-settings', label: isSystemAdmin ? 'LLM Settings' : 'Model Settings' },
     ...(isSystemAdmin ? [{ id: 'users', label: 'Users', adminOnly: true }] : []),
   ];
 
@@ -117,6 +117,11 @@ function MainLayout() {
               {mode === 'qa' ? 'QA' : 'Catalog'}
             </button>)}
           </div>
+          {isSystemAdmin ? <label className="text-xs">Workspace
+            <select aria-label="Workspace owner" className="block border rounded p-1 max-w-36" value={workspaceId} onChange={event => setWorkspaceId(event.target.value)}>
+              {(usersList.length ? usersList : [user]).map(account => <option key={account.id} value={account.id}>{account.username}{account.id === user.id ? ' (you)' : ''}</option>)}
+            </select>
+          </label> : <span className="text-xs">{user.username}'s workspace</span>}
           <NotificationsMenu />
           <UserNav />
         </div>
@@ -127,7 +132,7 @@ function MainLayout() {
         {activeModule === 'attribute-sets' && <AttributeSetsModule />}
         {activeModule === 'jobs' && <JobsModule initialJobId={createdCatalogJobId} />}
         {activeModule === 'idq' && <IDQModule />}
-        {activeModule === 'llm-settings' && isSystemAdmin && <LLMSettingsModule />}
+        {activeModule === 'llm-settings' && <LLMSettingsModule />}
         {activeModule === 'users' && isSystemAdmin && <UsersModule />}
       </main>
     </div>

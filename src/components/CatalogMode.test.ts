@@ -108,7 +108,7 @@ try {
     }
     if (path === '/api/job-runs/catalog-run') return route.fulfill({ json: run });
     if (path === '/api/job-runs/combined-run') return route.fulfill({ json: additionalRuns['combined-job'] });
-    if (path === '/api/job-runs/multi-run') return route.fulfill({ json: additionalRuns[jobs.at(-1)!.id] });
+    if (['/api/job-runs/multi-run', '/api/job-runs/multi-completed-run'].includes(path)) return route.fulfill({ json: additionalRuns[jobs.at(-1)!.id] });
     throw new Error(`Unexpected API request: ${request.method()} ${path}`);
   });
   await page.goto(server.resolvedUrls!.local[0]);
@@ -504,6 +504,10 @@ try {
   const hubGenerated = parseCatalogResponse({ choices: [{ message: { content: JSON.stringify({ row: { ...hubInput.template, name: 'Generated Hub' }, warnings: [], cellWarnings: [] }) } }] }, hubInput);
   Object.assign(hubItem.result.catalog_state, hubGenerated, { status: 'completed', error: null });
   hubItem.status = 'completed'; additionalRuns[multiJob.id].status = 'completed';multiJob.status = 'completed';
+  await page.getByRole('button', { name: 'Close job details', exact: true }).click();
+  additionalRuns[multiJob.id].id = 'multi-completed-run';
+  await multiCard.getByText('Last run: completed', { exact: true }).waitFor();
+  await multiCard.getByRole('button', { name: 'View Results', exact: true }).click();
   await files.getByRole('button', { name: 'Download Hub Upload', exact: true }).waitFor();
   assert.equal(await files.getByRole('button', { name: /Download .* Upload/ }).count(), 3);
   const hubUploadPromise = page.waitForEvent('download');

@@ -64,9 +64,9 @@ export function validateImageSelection(body: unknown, available: string[]) {
 }
 
 export function registerJobImageRoutes(app: Express, pool: Pool) {
-  const readItem = async (runId: string, sku: string) => {
+  const readItem = async (runId: string, sku: string, ownerId: string) => {
     const { rows: [item] } = await pool.query(`SELECT i.snapshot,i.result,i.selected_image_urls,r.status AS run_status,r.configuration->>'jobType' AS job_type
-      FROM job_run_items i JOIN job_runs r ON r.id=i.run_id WHERE i.run_id=$1 AND i.sku=$2`, [runId, sku]);
+      FROM job_run_items i JOIN job_runs r ON r.id=i.run_id JOIN jobs j ON j.id=r.job_id WHERE i.run_id=$1 AND i.sku=$2 AND j.owner_id=$3`, [runId, sku, ownerId]);
     if (!item) throw new ApiError(404, 'Run SKU does not exist.');
     if (item.job_type !== 'catalog') throw new ApiError(400, 'Images are available only for Catalog runs.');
     if (['queued', 'running', 'cancelling'].includes(item.run_status)) throw new ApiError(409, 'Wait for this Catalog run to finish before selecting or exporting images.');
@@ -74,11 +74,11 @@ export function registerJobImageRoutes(app: Express, pool: Pool) {
   };
   app.put('/api/job-runs/:id/items/:sku/images', async (req, res, next) => {
     try {
-      const item = await readItem(String(req.params.id), String(req.params.sku));
+      const item = await readItem(String(req.params.id), String(req.params.sku), res.locals.workspaceId);
       const { selected, expected } = validateImageSelection(req.body, catalogImages(item.result || item.snapshot).map(image => image.url));
       const saved = await pool.query(`UPDATE job_run_items SET selected_image_urls=$3::jsonb
-        WHERE run_id=$1 AND sku=$2 AND selected_image_urls=$4::jsonb RETURNING selected_image_urls`,
-        [req.params.id, req.params.sku, JSON.stringify(selected), JSON.stringify(expected)]);
+        WHERE run_id=$1 AND sku=$2 AND selected_image_urls=$4::jsonb AND EXISTS(SELECT 1 FROM job_runs r JOIN jobs j ON j.id=r.job_id WHERE r.id=run_id AND j.owner_id=$5) RETURNING selected_image_urls`,
+        [req.params.id, req.params.sku, JSON.stringify(selected), JSON.stringify(expected), res.locals.workspaceId]);
       if (!saved.rowCount) throw new ApiError(409, 'Image selections changed in another tab. Close and reopen the image picker before saving.');
       res.json({ selectedImageUrls: saved.rows[0].selected_image_urls });
     } catch (error) { next(error); }
@@ -88,7 +88,7 @@ export function registerJobImageRoutes(app: Express, pool: Pool) {
     const disconnect = () => { if (!res.writableEnded) controller.abort(); };
     res.on('close', disconnect);
     try {
-      const item = await readItem(String(req.params.id), String(req.params.sku));
+      const item = await readItem(String(req.params.id), String(req.params.sku), res.locals.workspaceId);
       const index = Number(req.params.index);
       const image = /^\d+$/.test(String(req.params.index)) && Number.isSafeInteger(index) && catalogImages(item.result || item.snapshot)[index];
       if (!image) throw new ApiError(404, 'The image is not present in this SKU markdown.');

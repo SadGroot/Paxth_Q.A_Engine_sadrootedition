@@ -181,7 +181,7 @@ export async function runIdqProduct(input: IdqInput, mapping: IdqMapping, config
     const base: any = buildQaRequest(config.settings, { messages }, 'catalog').payload;
     if (functions) { delete base.response_format; base.tools = tools; base.tool_choice = 'auto'; base.parallel_tool_calls = false; }
     const response = await complete(base, execution, {
-      taskLabel: 'IDQ', maxAttempts: 2, attempts: entry.attempts,
+      taskLabel: 'IDQ', keySlot: config.settings.providerKeySlot, maxAttempts: 2, attempts: entry.attempts,
       lastFailure: entry.lastFailure, lastReasoningEffort: entry.reasoningEffort,
       beforeAttempt: async (attempt, request) => {
         entry.attempts = attempt; entry.reasoningEffort = (request as typeof base).reasoning_effort; await save();

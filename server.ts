@@ -1,3 +1,4 @@
+import { startWorkScheduler } from './src/server/workScheduler.js';
 import express from "express";
 import { createServer as createHttpServer } from "node:http";
 import path from "node:path";
@@ -10,17 +11,20 @@ import { ApiError, registerCatalogRoutes } from "./src/server/catalog.js";
 import { initializeAuth, registerAuth } from "./src/server/auth.js";
 import { initializeProvider, registerProviderRoutes, getProviderSettings } from "./src/server/provider.js";
 import { collectProductPage } from "./src/server/scrapePipeline.js";
-import { initializeJobRuns, registerJobRunRoutes, startJobWorker } from "./src/server/jobRunner.js";
+import { initializeJobRuns, registerJobRunRoutes, executeRun } from "./src/server/jobRunner.js";
 import { registerScrapeRoutes } from "./src/server/scraper.js";
 import { registerJobImageRoutes } from "./src/server/jobImages.js";
 import { registerDocumentIngestionRoutes } from "./src/server/documentIngestion.js";
-import { initializeIdq, registerIdqRoutes, startIdqWorker } from './src/server/idqJobs.js';
+import { initializeIdq, registerIdqRoutes, executeIdqJob } from './src/server/idqJobs.js';
+
+import { requireWorkspaceMigration } from './src/server/workspaces.js';
 
 async function startServer() {
   if (!pool || !db) throw new Error("DATABASE_URL is required");
+  await requireWorkspaceMigration(pool);
+  await initializeAuth(pool);
   await initializeDatabase(pool);
   await initializeQaConfiguration(db);
-  await initializeAuth(pool);
   await initializeProvider(pool);
   await initializeJobRuns(pool);
   await initializeIdq(pool);
@@ -29,7 +33,6 @@ async function startServer() {
   const listener = createHttpServer(app);
   const PORT = Number(process.env.PORT) || 3000;
   app.disable('x-powered-by');
-  app.use(express.json({limit:'50mb'}));
   app.get('/healthz', async (_req,res) => {
     try { await verifySchema(pool); res.json({status:'ready'}); }
     catch { res.status(503).json({status:'unavailable'}); }
@@ -42,7 +45,7 @@ async function startServer() {
   registerQaConfigurationRoutes(app,db);
   registerCatalogRoutes(app,pool);
   registerDocumentIngestionRoutes(app,pool);
-  registerScrapeRoutes(app, async (url, signal) => collectProductPage(url, signal, await getProviderSettings(pool)));
+  registerScrapeRoutes(app, async (url, signal, ownerId) => collectProductPage(url, signal, await getProviderSettings(pool, ownerId)));
   registerProviderRoutes(app,pool);
   registerJobRunRoutes(app,pool);
   registerJobImageRoutes(app,pool);
@@ -79,14 +82,13 @@ async function startServer() {
   listener.listen(PORT, process.env.HOST || "0.0.0.0", () => {
     console.log(`Server running on http://localhost:${PORT}`);
   });
-  const stopWorker = startJobWorker(pool);
-  const stopIdqWorker = startIdqWorker(pool);
+  const stopWorker = startWorkScheduler(pool, { qa: executeRun, idq: executeIdqJob });
   let stopping = false;
   const shutdown = async () => {
     if (stopping) return;
     stopping = true;
     listener.close();
-    await Promise.all([stopWorker(), stopIdqWorker()]);
+    await stopWorker();
     await vite?.close();
     await pool.end();
   };

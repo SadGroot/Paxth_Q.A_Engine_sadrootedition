@@ -1,3 +1,4 @@
+import { initializeJobRuns } from './jobRunner';
 import assert from 'node:assert/strict';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { createServer } from 'node:http';
@@ -22,11 +23,13 @@ const pool=new Pool({connectionString:process.env.TEST_DATABASE_URL,options:`-c 
 const app=express(),server=createServer(app);let stop:(()=>Promise<void>)|undefined;
 process.env.LLM_BASE_URL='http://127.0.0.1:1/v1';process.env.LLM_API_KEY='test-key';process.env.CRAWL4AI_API_KEY='test-crawl';process.env.NODE_ENV='test';
 try {
-  await initializeDatabase(pool);await initializeQaConfiguration(drizzle(pool,{schema}));await initializeAuth(pool);await initializeProvider(pool);await initializeIdq(pool);await initializeIdq(pool);
+  await initializeAuth(pool);await initializeDatabase(pool);await initializeQaConfiguration(drizzle(pool,{schema}));await initializeAuth(pool);await initializeProvider(pool);await initializeIdq(pool);await initializeIdq(pool);await initializeJobRuns(pool);
   const headers=['sku','name','capacity'];const requirements={sku:'mandatory',name:'optional',capacity:'mandatory'};
   await pool.query('INSERT INTO attribute_sets(id,name,rules_markdown,catalog_headers,catalog_header_requirements) VALUES($1,$2,$3,$4,$5),($6,$7,$3,$4,$5),($8,$9,$3,$4,$10)',
     ['a','Phones','Snapshot rule',JSON.stringify(headers),JSON.stringify(requirements),'b','Other Phones','u','Unclassified','{}']);
   await pool.query("INSERT INTO users(id,username,password,role) VALUES('operator','Operator','unused','user'),('other','Other','unused','user'),('admin','Admin','unused','admin')");
+  process.env.AICREDITS_API_KEY_1='idq-test-key';
+  await pool.query("INSERT INTO user_key_assignments(user_id,key_slot) VALUES('operator','AICREDITS_API_KEY_1')");
   const cookies:Record<string,string>={};
   for(const id of ['operator','other','admin']){const token=randomBytes(32).toString('hex');await pool.query("INSERT INTO sessions(token_hash,user_id,expires_at) VALUES($1,$2,now()+interval '1 hour')",[hashSessionToken(token),id]);cookies[id]=`paxth_session=${token}`;}
   app.use(express.json());await new Promise<void>(resolve=>server.listen(0,'127.0.0.1',resolve));
@@ -54,7 +57,7 @@ try {
   assert.equal(saved.mappings[0].rules,'Snapshot rule');assert.equal(saved.settings.modelName,'deepseek/deepseek-v4.1-flash');assert.deepEqual(saved.limits,{products:50,searches:4,reads:6,totalMs:600000,finalMs:90000});
   await pool.query("UPDATE attribute_sets SET rules_markdown='Changed rules' WHERE id='a'");
   assert.equal((await pool.query('SELECT configuration FROM idq_jobs WHERE id=$1',[id])).rows[0].configuration.mappings[0].rules,'Snapshot rule');
-  assert.equal((await request(`/${id}/cancel`,'POST',undefined,'other')).status,403);
+  assert.equal((await request(`/${id}/cancel`,'POST',undefined,'other')).status,404);
   assert.equal((await request(`/${id}/cancel`,'POST')).body.status,'cancelled','Queued cancellation does not wait for a worker');
   assert.equal((await request(`/${id}/resume`,'POST')).body.status,'queued');
   const template=await fetch(origin+'/api/idq/jobs/template',{method:'POST',headers:{Origin:origin,Cookie:cookies.operator,'Content-Type':'application/json'},body:JSON.stringify({attributeSetIds:['a','b']})});assert.equal(template.status,200);
@@ -69,16 +72,16 @@ try {
   };
   stop=startIdqWorker(pool,runner);await waitFor(async()=>captures===1);
   await stop();stop=undefined;
-  assert.equal((await readIdqJob(pool,id)).items[0].status,'running');
+  assert.equal((await readIdqJob(pool,id,'operator')).items[0].status,'running');
   stop=startIdqWorker(pool,runner);await waitFor(async()=>runs===2);assert.equal(captures,1,'Worker restart reused saved capture');
   assert.equal((await request(`/${id}/cancel`,'POST')).status,200);
-  await waitFor(async()=>(await readIdqJob(pool,id)).status==='cancelled');
-  const cancelled=await readIdqJob(pool,id);assert.ok(cancelled.items.every((item:any)=>item.status==='cancelled'));
-  assert.equal((await request(`/${id}/resume`,'POST',undefined,'other')).status,403);
+  await waitFor(async()=>(await readIdqJob(pool,id,'operator')).status==='cancelled');
+  const cancelled=await readIdqJob(pool,id,'operator');assert.ok(cancelled.items.every((item:any)=>item.status==='cancelled'));
+  assert.equal((await request(`/${id}/resume`,'POST',undefined,'other')).status,404);
   hold=false;assert.equal((await request(`/${id}/resume`,'POST')).status,200);
-  await waitFor(async()=>(await readIdqJob(pool,id)).status==='completed');
+  await waitFor(async()=>(await readIdqJob(pool,id,'operator')).status==='completed');
   assert.equal(captures,2,'Each product captured only once, including cancellation/resume');
-  const completed=await readIdqJob(pool,id);assert.equal(completed.finished,2);assert.equal(completed.items[0].result.values.sku,'0001');
+  const completed=await readIdqJob(pool,id,'operator');assert.equal(completed.finished,2);assert.equal(completed.items[0].result.values.sku,'0001');
   const exportRes=await fetch(origin+`/api/idq/jobs/${id}/export`,{headers:{Cookie:cookies.operator}});assert.equal(exportRes.status,200);
   const book=new ExcelJS.Workbook();await book.xlsx.load(await exportRes.arrayBuffer() as any);assert.equal(book.worksheets.length,3);assert.equal(book.getWorksheet('Phones')!.getRow(2).getCell(1).value,'0001');
   assert.equal((await pool.query('SELECT count(*) FROM sku_data')).rows[0].count,'0','IDQ does not alter the catalog');assert.equal((await pool.query('SELECT count(*) FROM jobs')).rows[0].count,'0');

@@ -9,12 +9,14 @@ import { useAppContext } from '../context/AppContext';
 export function CatalogFileDownload({ file, filename, label, sheetName = 'Catalog' }: {
   file: Pick<CatalogFileGroup, 'headers' | 'rows' | 'cellWarnings'>; filename: string; label: string; sheetName?: string;
 }) {
-  const { addNotification } = useAppContext();
+  const { addNotification, workspaceSignal } = useAppContext();
   const download = async () => {
     try {
       const workbook = new ExcelJS.Workbook();
       populateCatalogFile(workbook.addWorksheet(sheetName), file);
-      saveAs(new Blob([await workbook.xlsx.writeBuffer()], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }),
+      const exportedBuffer = await workbook.xlsx.writeBuffer();
+      workspaceSignal.throwIfAborted();
+      saveAs(new Blob([exportedBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }),
         `${filename.replace(/[^a-zA-Z0-9_-]/g, '_')}.xlsx`);
     } catch (error) {
       addNotification({ type: 'error', title: 'Download Failed', message: error instanceof Error ? error.message : 'Could not generate this workbook. Please retry.' });

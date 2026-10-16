@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch server.ts",
-    "build": "vite build --outDir dist/public && esbuild server.ts --bundle --platform=node --format=esm --packages=external --sourcemap --outfile=dist/server.mjs && esbuild scripts/bootstrap-admin.ts --bundle --platform=node --format=esm --packages=external --outfile=dist/bootstrap-admin.mjs",
+    "build": "vite build --outDir dist/public && esbuild server.ts --bundle --platform=node --format=esm --packages=external --sourcemap --outfile=dist/server.mjs && esbuild scripts/bootstrap-admin.ts --bundle --platform=node --format=esm --packages=external --outfile=dist/bootstrap-admin.mjs && esbuild scripts/migrate-workspaces.ts --bundle --platform=node --format=esm --packages=external --outfile=dist/migrate-workspaces.mjs",
     "start": "node dist/server.mjs",
     "preview": "vite preview --outDir dist/public",
     "clean": "rm -rf dist",
@@ -39,7 +39,11 @@
     "test:idq": "tsx src/lib/idq.test.ts && tsx src/server/idqResearch.test.ts",
     "test:idq-db": "tsx src/server/idqJobs.test.ts",
     "test:idq-browser": "tsx src/components/IDQModule.test.ts",
-    "test:idq-live": "tsx scripts/test-live-idq.ts"
+    "test:idq-live": "tsx scripts/test-live-idq.ts",
+    "migrate:workspaces": "tsx scripts/migrate-workspaces.ts",
+    "test:workspaces-db": "tsx src/server/workspaces.test.ts",
+    "test:workspace-migration-db": "tsx src/server/workspaceMigration.test.ts",
+    "test:workspace-browser": "tsx src/components/WorkspaceSwitch.test.ts"
   },
   "dependencies": {
     "@tailwindcss/typography": "^0.5.20",

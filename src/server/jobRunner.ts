@@ -1,3 +1,4 @@
+import { startWorkScheduler } from './workScheduler';
 import { randomUUID } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
 import type { Express } from 'express';
@@ -15,9 +16,8 @@ import { ApiError, mapCatalogRow, saveScrapedEvidence, saveScrapeFailure, scrape
 import { CATALOG_PASS_THROUGH_HEADERS, catalogPassThroughValue, hasCompletedCatalog, prepareCatalogInput, parseCatalogResponse } from '../lib/catalogGeneration';
 import { catalogMappings, catalogMappingFor, prepareCatalogOutputs } from '../lib/catalogFiles';
 
-// ponytail: global mutation lock and one worker fit this backend; partition by job if throughput requires it.
+// Serialize short checkpoint mutations; the shared scheduler overlaps work across workspaces.
 export const JOB_MUTATION_LOCK = 73462190;
-const WORKER_LOCK = 73462191;
 const ACTIVE = ['queued', 'running', 'cancelling'];
 const SKU_BUDGET_MS = 300_000;
 const errorText = (error: unknown) => error instanceof Error ? error.message : 'Job execution failed';
@@ -78,8 +78,8 @@ const publicRun = (row: any) => ({
   finishedAt: row.finished_at, error: row.error,
 });
 
-async function readRun(pool: Pool | PoolClient, id: string) {
-  const { rows: [run] } = await pool.query('SELECT * FROM job_runs WHERE id=$1', [id]);
+async function readRun(pool: Pool | PoolClient, id: string, ownerId: string) {
+  const { rows: [run] } = await pool.query('SELECT r.* FROM job_runs r JOIN jobs j ON j.id=r.job_id WHERE r.id=$1 AND j.owner_id=$2', [id, ownerId]);
   if (!run) throw new JobError('Run does not exist', 404);
   const { rows } = await pool.query('SELECT * FROM job_run_items WHERE run_id=$1 ORDER BY position', [id]);
   const catalogOutputs = run.configuration.jobType === 'catalog' ? run.configuration.catalogOutputs ||
@@ -111,26 +111,26 @@ export function registerJobRunRoutes(app: Express, pool: Pool) {
       const input = validateRunRequest(req.body);
       client = await pool.connect();
       const id = await transaction(client, async () => {
-        const { rows: [existing] } = await client!.query('SELECT * FROM job_runs WHERE job_id=$1 AND request_id=$2', [req.params.id, input.requestId]);
+        const { rows: [existing] } = await client!.query('SELECT r.* FROM job_runs r JOIN jobs j ON j.id=r.job_id WHERE r.job_id=$1 AND r.request_id=$2 AND j.owner_id=$3', [req.params.id, input.requestId, res.locals.workspaceId]);
         if (existing) {
           if (existing.mode !== input.mode || existing.selected_sku !== (input.sku ?? null) || existing.actor_id !== res.locals.user.id) {
             throw new JobError('This requestId was already used for a different request', 409);
           }
           return existing.id;
         }
-        const { rows: [job] } = await client!.query('SELECT * FROM jobs WHERE id=$1 FOR UPDATE', [req.params.id]);
+        const { rows: [job] } = await client!.query('SELECT * FROM jobs WHERE id=$1 AND owner_id=$2 FOR UPDATE', [req.params.id, res.locals.workspaceId]);
         if (!job) throw new JobError('Job does not exist', 404);
         if ((await client!.query('SELECT 1 FROM job_runs WHERE job_id=$1 AND status=ANY($2::text[])', [job.id, ACTIVE])).rowCount) {
           throw new JobError('This job already has an active run', 409);
         }
-        const { rows: catalog } = await client!.query('SELECT * FROM sku_data WHERE sku=ANY($1::text[])', [job.skus]);
+        const { rows: catalog } = await client!.query('SELECT * FROM sku_data WHERE sku=ANY($1::text[]) AND owner_id=$2', [job.skus, res.locals.workspaceId]);
         const rowsBySku = new Map(catalog.map(row => [row.sku, row]));
         if (!Array.isArray(job.skus) || job.skus.some((sku: string) => !rowsBySku.has(sku))) throw new JobError('A job SKU no longer exists', 409);
         if (input.mode === 'single' && !job.skus.includes(input.sku)) throw new JobError('The SKU is not in this job');
         const jobType = job.job_type || 'qa';
         const prepared = jobType === 'catalog' ? await prepareJobCatalogOutputs(client!, job.skus.map((sku: string) => rowsBySku.get(sku)), !job.catalog_outputs?.shipping) : undefined;
-        getProviderCredentials();
-        const settings = await getProviderSettings(client!);
+        const settings = await getProviderSettings(client!, res.locals.workspaceId);
+        getProviderCredentials(settings.providerKeySlot);
         const { rows: [memory] } = await client!.query("SELECT memory FROM qa_agent_settings WHERE id='default'");
         const { rows: sets } = await client!.query('SELECT id,name,rules_markdown AS "rulesMarkdown",catalog_headers AS "catalogHeaders" FROM attribute_sets');
         if (!memory?.memory) throw new JobError('QA memory is unavailable', 503);
@@ -172,7 +172,7 @@ export function registerJobRunRoutes(app: Express, pool: Pool) {
           [job.id, prepared ? JSON.stringify(prepared.outputs) : null, prepared?.mappings.length === 1 ? prepared.mappings[0].attributeSet : null]);
         return runId;
       });
-      res.status(202).json(await readRun(client, id));
+      res.status(202).json(await readRun(client, id, res.locals.workspaceId));
     } catch (error) {
       const known = error instanceof JobError || error instanceof ProviderError || error instanceof ApiError;
       if (!known) {
@@ -185,12 +185,13 @@ export function registerJobRunRoutes(app: Express, pool: Pool) {
   });
   app.get('/api/jobs/:id/runs', async (req, res) => {
     try {
+      if (!(await pool.query('SELECT id FROM jobs WHERE id=$1 AND owner_id=$2', [req.params.id, res.locals.workspaceId])).rowCount) { res.status(404).json({ error: 'Job does not exist' }); return; }
       const { rows } = await pool.query('SELECT * FROM job_runs WHERE job_id=$1 ORDER BY created_at DESC', [req.params.id]);
       res.json(rows.map(publicRun));
     } catch { res.status(503).json({ error: 'Could not load run history' }); }
   });
   app.get('/api/job-runs/:id', async (req, res) => {
-    try { res.json(await readRun(pool, String(req.params.id))); }
+    try { res.json(await readRun(pool, String(req.params.id), res.locals.workspaceId)); }
     catch (error) { res.status(error instanceof JobError ? error.status : 503).json({ error: error instanceof JobError ? error.message : 'Could not load progress' }); }
   });
   app.post('/api/job-runs/:id/cancel', async (req, res) => {
@@ -198,12 +199,15 @@ export function registerJobRunRoutes(app: Express, pool: Pool) {
     try {
       client = await pool.connect();
       await transaction(client, async () => {
-        const { rows: [run] } = await client!.query('SELECT * FROM job_runs WHERE id=$1 FOR UPDATE', [req.params.id]);
+        const { rows: [run] } = await client!.query('SELECT r.* FROM job_runs r JOIN jobs j ON j.id=r.job_id WHERE r.id=$1 AND j.owner_id=$2 FOR UPDATE OF r', [req.params.id, res.locals.workspaceId]);
         if (!run) throw new JobError('Run does not exist', 404);
-        if (run.actor_id !== res.locals.user.id && res.locals.user.role !== 'admin') throw new JobError('You can only stop your own runs', 403);
-        if (ACTIVE.includes(run.status)) await client!.query("UPDATE job_runs SET status='cancelling' WHERE id=$1", [run.id]);
+        if (run.status === 'queued') {
+          await client!.query("UPDATE job_run_items SET status='cancelled',finished_at=now(),error='Cancelled' WHERE run_id=$1 AND status='queued'", [run.id]);
+          await client!.query("UPDATE job_runs SET status='cancelled',finished_at=now(),owner_token=NULL,error='Run cancelled before execution.' WHERE id=$1", [run.id]);
+          await client!.query("UPDATE jobs SET status='pending',error=NULL WHERE id=$1", [run.job_id]);
+        } else if (ACTIVE.includes(run.status)) await client!.query("UPDATE job_runs SET status='cancelling' WHERE id=$1", [run.id]);
       });
-      res.json(await readRun(client, String(req.params.id)));
+      res.json(await readRun(client, String(req.params.id), res.locals.workspaceId));
     } catch (error) { res.status(error instanceof JobError ? error.status : 503).json({ error: error instanceof JobError ? error.message : 'Could not cancel the run' }); }
     finally { client?.release(); }
   });
@@ -233,15 +237,15 @@ async function persistItem(client: PoolClient, run: any, owner: string, item: an
       [run.id, item.sku, result.error ? 'failed' : 'completed', JSON.stringify(result), result.error ?? null, item.provider_state ? JSON.stringify(item.provider_state) : null]);
     // A result remains in history even when newer evidence prevents updating the live catalog.
     if (run.configuration.jobType === 'catalog') {
-      await client.query('UPDATE sku_data SET catalog_state=$3 WHERE sku=$1 AND revision=$2',
-        [item.sku, item.revision, JSON.stringify(result.catalog_state)]);
+      await client.query('UPDATE sku_data SET catalog_state=$3 WHERE sku=$1 AND revision=$2 AND owner_id=$4',
+        [item.sku, item.revision, JSON.stringify(result.catalog_state), run.owner_id]);
       return;
     }
     await client.query(`UPDATE sku_data SET status=$3,qa_result=COALESCE($4::jsonb,qa_result),export_data=COALESCE($5::jsonb,export_data),last_job_id=$6,
       tokens_used=$7,time_taken=$8,error=$9,qa_revision=CASE WHEN $4::jsonb IS NOT NULL THEN $2 ELSE qa_revision END
-      WHERE sku=$1 AND revision=$2`, [item.sku, item.revision, result.status,
+      WHERE sku=$1 AND revision=$2 AND owner_id=$10`, [item.sku, item.revision, result.status,
       result.qa_result ? JSON.stringify(result.qa_result) : null, result.export_data ? JSON.stringify(result.export_data) : null, run.job_id,
-      result.tokensUsed ? JSON.stringify(result.tokensUsed) : null, result.timeTaken ?? 0, result.error ?? null]);
+      result.tokensUsed ? JSON.stringify(result.tokensUsed) : null, result.timeTaken ?? 0, result.error ?? null, run.owner_id]);
   });
 }
 
@@ -267,7 +271,7 @@ async function finishRun(client: PoolClient, run: any, owner: string) {
   });
 }
 
-async function executeRun(client: PoolClient, pool: Pool, run: any, owner: string, ownership: AbortSignal, scrape: typeof scrapeProductPage) {
+export async function executeRun(client: PoolClient, pool: Pool, run: any, owner: string, ownership: AbortSignal, scrape: typeof scrapeProductPage = scrapeProductPage) {
   const settings = normalizeSettings(run.configuration.settings);
   const isCatalog = run.configuration.jobType === 'catalog';
   while (!ownership.aborted) {
@@ -319,8 +323,8 @@ async function executeRun(client: PoolClient, pool: Pool, run: any, owner: strin
             await assertOwner(client, run.id, owner);
             execution.throwIfAborted();
             const saved = retrieved
-              ? await saveScrapedEvidence(client, item.sku, item.revision, retrieved)
-              : await saveScrapeFailure(client, item.sku, item.revision, errorText(retrievalFailure));
+              ? await saveScrapedEvidence(client, item.sku, item.revision, retrieved, run.owner_id)
+              : await saveScrapeFailure(client, item.sku, item.revision, errorText(retrievalFailure), run.owner_id);
             // A newer live revision keeps this evidence in run history only.
             const nextRevision = saved && retrieved ? saved.revision : item.revision;
             const nextSnapshot: SkuData = retrieved ? { ...snapshot, revision: nextRevision, scraped_markdown: retrieved.markdown,
@@ -343,7 +347,7 @@ async function executeRun(client: PoolClient, pool: Pool, run: any, owner: strin
         ? buildQaRequest({ ...settings, modelName: 'deepseek/deepseek-v4.1-flash', deepseekReasoningEffort: 'none' }, input, 'catalog').payload : undefined;
       let parsedQa: ReturnType<typeof parseQaResponse> | undefined;
       const response = await completeQa(payload, execution, {
-        taskLabel: isCatalog ? 'Catalog' : 'QA',
+        taskLabel: isCatalog ? 'Catalog' : 'QA', keySlot: settings.providerKeySlot,
         attempts: item.attempts,
         lastError: item.error,
         fallbackPayload, lastFailure: item.provider_state?.lastFailure,
@@ -418,39 +422,5 @@ async function executeRun(client: PoolClient, pool: Pool, run: any, owner: strin
 }
 
 export function startJobWorker(pool: Pool, scrape = scrapeProductPage): () => Promise<void> {
-  const stop = new AbortController();
-  const task = (async () => {
-    while (!stop.signal.aborted) {
-      let client: PoolClient | undefined;
-      const lost = new AbortController();
-      const signal = AbortSignal.any([stop.signal, lost.signal]);
-      const onLoss = () => lost.abort(new Error('Worker database ownership lost'));
-      try {
-        client = await pool.connect();
-        client.on('error', onLoss);
-        client.on('end', onLoss);
-        const { rows: [lock] } = await client.query('SELECT pg_try_advisory_lock($1) AS acquired', [WORKER_LOCK]);
-        if (lock.acquired) {
-          const owner = randomUUID();
-          const run = await transaction(client, async () => {
-            const { rows: [next] } = await client!.query('SELECT * FROM job_runs WHERE status=ANY($1::text[]) ORDER BY created_at LIMIT 1 FOR UPDATE', [ACTIVE]);
-            if (!next) return null;
-            const { rows: [claimed] } = await client!.query("UPDATE job_runs SET status=CASE WHEN status='cancelling' THEN status ELSE 'running' END,owner_token=$2,started_at=COALESCE(started_at,now()) WHERE id=$1 RETURNING *", [next.id, owner]);
-            return claimed;
-          });
-          if (run) await executeRun(client, pool, run, owner, signal, scrape);
-        }
-      } catch (error) {
-        if (!stop.signal.aborted) console.error('Job worker paused; unfinished items will resume after database recovery.');
-      } finally {
-        if (client) {
-          await client.query('SELECT pg_advisory_unlock($1)', [WORKER_LOCK]).catch(() => {});
-          client.removeListener('error', onLoss); client.removeListener('end', onLoss);
-          client.release(lost.signal.aborted);
-        }
-      }
-      await delay(500, undefined, { signal: stop.signal }).catch(() => {});
-    }
-  })();
-  return async () => { stop.abort(new Error('Server shutting down')); await task; };
+  return startWorkScheduler(pool, { qa: (client, pool, run, owner, signal) => executeRun(client, pool, run, owner, signal, scrape) });
 }

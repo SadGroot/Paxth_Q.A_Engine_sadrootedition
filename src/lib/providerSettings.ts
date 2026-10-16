@@ -4,6 +4,7 @@ export interface AppSettings {
   llmProvider: string;
   baseUrl: string;
   providerConfigured: boolean;
+  providerKeySlot?: string;
   scraperConfigured: boolean;
   modelName: string;
   scraperModelName: string;
@@ -38,6 +39,7 @@ export function normalizeSettings(settings: Partial<AppSettings> = {}): AppSetti
   return {
     ...DEFAULT_SETTINGS,
     baseUrl: "",
+    providerKeySlot: settings.providerKeySlot,
     providerConfigured: settings.providerConfigured === true,
     scraperConfigured: settings.scraperConfigured === true,
     modelName,

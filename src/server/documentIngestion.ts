@@ -75,12 +75,12 @@ export function registerDocumentIngestionRoutes(app: Express, pool: Pool) {
       throw new ApiError(400, 'Supply expectedRevision, fileName, and dataBase64.');
     }
     const sku = String(req.params.sku), { expectedRevision, fileName, dataBase64 } = req.body;
-    const { rows: [before] } = await pool.query('SELECT id,revision FROM sku_data WHERE sku=$1', [sku]);
+    const { rows: [before] } = await pool.query('SELECT id,revision FROM sku_data WHERE sku=$1 AND owner_id=$2', [sku, res.locals.workspaceId]);
     if (!before) throw new ApiError(404, 'SKU not found.');
     if (before.revision !== expectedRevision) throw new ApiError(409, 'SKU evidence changed. Refresh the catalog before attaching a file.');
     const converted = await documentMarkdown(fileName, dataBase64);
     const saved = await transaction(pool, async client => {
-      const { rows: [current] } = await client.query('SELECT * FROM sku_data WHERE sku=$1 FOR UPDATE', [sku]);
+      const { rows: [current] } = await client.query('SELECT * FROM sku_data WHERE sku=$1 AND owner_id=$2 FOR UPDATE', [sku, res.locals.workspaceId]);
       if (!current) throw new ApiError(404, 'SKU was deleted during ingestion.');
       if (current.id !== before.id || current.revision !== expectedRevision) throw new ApiError(409, 'SKU changed during ingestion. Refresh the catalog before retrying.');
       const existing = current.scraped_markdown || '';
@@ -91,7 +91,7 @@ export function registerDocumentIngestionRoutes(app: Express, pool: Pool) {
         : { method: 'manual', requestedUrl: null, finalUrl: null, capturedAt: new Date().toISOString() };
       const { rows: [row] } = await client.query(`UPDATE sku_data SET scraped_markdown=$3,scrape_metadata=$4,
         scrape_status='success',scrape_error=NULL,status='ready',error=NULL,revision=revision+1
-        WHERE sku=$1 AND revision=$2 AND id=$5 RETURNING *`, [sku, expectedRevision, markdown, JSON.stringify(metadata), before.id]);
+        WHERE sku=$1 AND revision=$2 AND id=$5 AND owner_id=$6 RETURNING *`, [sku, expectedRevision, markdown, JSON.stringify(metadata), before.id, res.locals.workspaceId]);
       if (!row) throw new ApiError(409, 'SKU changed during ingestion. Refresh the catalog before retrying.');
       return mapCatalogRow(row);
     });

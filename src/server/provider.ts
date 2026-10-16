@@ -1,3 +1,4 @@
+import { configuredKeySlots, workspaceKeySlot } from './workspaces';
 import type { Express } from 'express';
 import type { Pool, PoolClient } from 'pg';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -7,7 +8,11 @@ import { extractLLMResponseContent } from '../lib/llmResponse';
 import { buildQaRequest, QaResponseError, type QaRecoveryState, type QaResponseFailure } from '../lib/qaRequest';
 import { transaction } from './database';
 
-export function getProviderCredentials() {
+export function getProviderCredentials(keySlot?: string) {
+  if (keySlot !== undefined) {
+    if (!configuredKeySlots().includes(keySlot)) throw new ProviderError('The assigned workspace API key is unavailable. Ask an administrator to configure it.', 503);
+    return { baseUrl: 'https://aicredits.in/v1', apiKey: process.env[keySlot]!.trim() };
+  }
   let baseUrl = process.env.LLM_BASE_URL?.trim();
   let apiKey = process.env.LLM_API_KEY?.trim();
   // Use the existing AI Credits key only with its own gateway; never mix it with an override.
@@ -29,12 +34,14 @@ export async function initializeProvider(pool: Pool) {
   await pool.query(`UPDATE provider_settings SET settings = settings - 'scrapperModelName' - 'navigationModelInitialized' - 'scraperTimeout'
     WHERE id='default' AND settings ?| ARRAY['scrapperModelName','navigationModelInitialized','scraperTimeout']`);
 }
-export async function getProviderSettings(pool: Pool | PoolClient): Promise<AppSettings> {
+export async function getProviderSettings(pool: Pool | PoolClient, ownerId?: string): Promise<AppSettings> {
   const { rows: [row] } = await pool.query("SELECT p.settings, q.memory FROM provider_settings p JOIN qa_agent_settings q ON q.id=p.id WHERE p.id='default'");
   if (!row) throw new ProviderError('Provider settings unavailable', 503);
+  const providerKeySlot = ownerId ? await workspaceKeySlot(pool, ownerId) : undefined;
+  const overrides = ownerId ? (await pool.query('SELECT settings FROM workspace_provider_settings WHERE owner_id=$1', [ownerId])).rows[0]?.settings : {};
   let providerConfigured = false;
-  try { getProviderCredentials(); providerConfigured = true; } catch { /* Report configuration state without exposing secrets. */ }
-  return normalizeSettings({ ...row.settings, qaAgentMemory: row.memory, providerConfigured,
+  try { getProviderCredentials(providerKeySlot); providerConfigured = true; } catch { /* Report configuration state without exposing secrets. */ }
+  return normalizeSettings({ ...row.settings, ...overrides, providerKeySlot, qaAgentMemory: row.memory, providerConfigured,
     scraperConfigured: Boolean(process.env.CRAWL4AI_API_KEY?.trim()) });
 }
 export function validateSettings(value: any) {
@@ -50,6 +57,7 @@ export function validateSettings(value: any) {
   return editableSettings(normalizeSettings(value));
 }
 export async function completeQa(payload: unknown, signal: AbortSignal, options: {
+  keySlot?: string;
   taskLabel?: 'QA' | 'Catalog' | 'Scraping' | 'IDQ';
   maxAttempts?: 1 | 2 | 3;
   attempts?: number; beforeAttempt?: (attempt: number, payload: unknown, recovery: QaRecoveryState) => Promise<void>;
@@ -68,7 +76,7 @@ export async function completeQa(payload: unknown, signal: AbortSignal, options:
     : `${label} used all ${budget} attempts before a result was saved; execution was interrupted. Start a fresh run to retry this SKU.`;
   signal.throwIfAborted();
   if ((options.attempts ?? 0) >= maxAttempts) throw new ProviderError(exhaustedMessage);
-  const { baseUrl, apiKey } = getProviderCredentials();
+  const { baseUrl, apiKey } = getProviderCredentials(options.keySlot);
   let lastFailure = options.lastFailure;
   let recovery = { ...options.qaRecovery };
   let thinkingDisabled = options.lastReasoningEffort === 'none' || recovery.thinkingDisabled === true;
@@ -134,6 +142,23 @@ export async function completeQa(payload: unknown, signal: AbortSignal, options:
   throw new ProviderError(exhaustedMessage);
 }
 export function registerProviderRoutes(app: Express, pool: Pool) {
+  app.get('/api/workspace-provider-settings', async (_req, res) => {
+    res.json(await getProviderSettings(pool, res.locals.workspaceId));
+  });
+  app.put('/api/workspace-provider-settings', async (req, res) => {
+    if (res.locals.user.role !== 'admin') throw new ProviderError('Administrator access required.', 403);
+    const { qaAgentMemory: _memory, ...allowed } = editableSettings(DEFAULT_SETTINGS);
+    if (!req.body || Array.isArray(req.body) || Object.keys(req.body).some(key => !Object.hasOwn(allowed, key))) throw new ProviderError('Only model settings can be overridden for a workspace.', 400);
+    const effective = await getProviderSettings(pool, res.locals.workspaceId);
+    const { qaAgentMemory: _shared, ...overrides } = validateSettings({ ...editableSettings(effective), ...req.body });
+    await pool.query('INSERT INTO workspace_provider_settings(owner_id,settings) VALUES($1,$2) ON CONFLICT(owner_id) DO UPDATE SET settings=EXCLUDED.settings', [res.locals.workspaceId, JSON.stringify(overrides)]);
+    res.json(await getProviderSettings(pool, res.locals.workspaceId));
+  });
+  app.delete('/api/workspace-provider-settings', async (_req, res) => {
+    if (res.locals.user.role !== 'admin') throw new ProviderError('Administrator access required.', 403);
+    await pool.query('DELETE FROM workspace_provider_settings WHERE owner_id=$1', [res.locals.workspaceId]);
+    res.json(await getProviderSettings(pool, res.locals.workspaceId));
+  });
   app.get('/api/provider-settings', async (_req, res) => { res.json(await getProviderSettings(pool)); });
   app.put('/api/provider-settings', async (req, res) => {
     if (res.locals.user?.role !== 'admin') { res.status(403).json({ error: 'Administrator access required' }); return; }
@@ -158,12 +183,12 @@ export function registerProviderRoutes(app: Express, pool: Pool) {
     res.on('close', disconnect);
     const signal = AbortSignal.any([controller.signal, AbortSignal.timeout(120000)]);
     try {
-      const credentials = getProviderCredentials();
+      const credentials = getProviderCredentials(await workspaceKeySlot(pool, res.locals.workspaceId));
       const purpose = req.body.purpose ?? 'qa';
       let modelName = req.body.modelName?.trim();
       let settings = DEFAULT_SETTINGS;
       if (modelName === undefined) {
-        settings = await getProviderSettings(pool);
+        settings = await getProviderSettings(pool, res.locals.workspaceId);
         modelName = purpose === 'scrape' ? settings.scraperModelName : settings.modelName;
       }
       signal.throwIfAborted();

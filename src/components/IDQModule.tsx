@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
 import { saveAs } from 'file-saver';
-import { api } from '../lib/api';
 import { useAttributeSets } from '../hooks/useAttributeSets';
 import { useAppContext } from '../context/AppContext';
 import { IDQ_LIMITS, validateIdqInput, type IdqMapping, type IdqMode, type IdqResult, type IdqSheet } from '../lib/idq';
@@ -13,7 +12,7 @@ const statusText = (status: string) => status.replaceAll('_', ' ');
 const button = 'border border-[#D7D3CD] px-4 py-2 text-sm rounded-sm hover:bg-[#F5F2EF] disabled:opacity-50';
 
 export function IDQModule() {
-  const { user } = useAppContext();
+  const { user, request: api, workspaceId, workspaceSignal } = useAppContext();
   const { attributeSets, isLoading, loadError } = useAttributeSets();
   const [mode, setMode] = useState<IdqMode | ''>('');
   const [sets, setSets] = useState<string[]>([]);
@@ -28,7 +27,7 @@ export function IDQModule() {
   const [historyError, setHistoryError] = useState('');
   const upload = useRef<HTMLInputElement>(null);
   const requestId = useRef(crypto.randomUUID());
-  const canChange = detail && (detail.actorId === user.id || user.role === 'admin');
+  const canChange = Boolean(detail);
   const refresh = async () => {
     try { setHistory(await api<Batch[]>('/api/idq/jobs')); setHistoryError(''); }
     catch (e) { setHistoryError((e as Error).message); }
@@ -45,9 +44,12 @@ export function IDQModule() {
   }, [selected]);
   const reset = () => { setSheets(null); setFilename(''); setError(''); requestId.current = crypto.randomUUID(); if (upload.current) upload.current.value = ''; };
   const download = async (path: string, file: string, init?: RequestInit) => {
-    const response = await fetch(path, { credentials: 'same-origin', ...init });
+    const response = await fetch(path, { credentials: 'same-origin', ...init, headers: { ...init?.headers, 'X-Workspace-Id': workspaceId }, signal: workspaceSignal });
+    workspaceSignal.throwIfAborted();
     if (!response.ok) throw new Error((await response.json().catch(() => null))?.error || 'Download failed.');
-    saveAs(await response.blob(), file);
+    const blob = await response.blob();
+    workspaceSignal.throwIfAborted();
+    saveAs(blob, file);
   };
   const act = async (action: 'cancel' | 'resume') => {
     if (!detail) return; setBusy(true); setError('');

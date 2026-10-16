@@ -1,13 +1,14 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { X } from 'lucide-react';
 import type { SkuData } from '../hooks/useCatalogData';
-import { api } from '../lib/api';
+import { useAppContext } from '../context/AppContext';
 import { catalogImageFilename, catalogImagePath, catalogImages } from '../lib/catalogImages';
 import { prepareCatalogImage } from '../lib/catalogImageExport';
 
 function ImageOption({ path, alt, filename, order, disabled, onToggle }: {
   path: string; alt: string; filename: string; order: number; disabled: boolean; onToggle: () => void;
 }) {
+  const { workspaceId, workspaceSignal } = useAppContext();
   const [preview, setPreview] = useState('');
   const [error, setError] = useState('');
   const [attempt, setAttempt] = useState(0);
@@ -15,11 +16,11 @@ function ImageOption({ path, alt, filename, order, disabled, onToggle }: {
     const controller = new AbortController();
     let objectUrl = '';
     setPreview(''); setError('');
-    prepareCatalogImage(path, controller.signal).then(blob => {
+    prepareCatalogImage(path, AbortSignal.any([controller.signal, workspaceSignal]), workspaceId).then(blob => {
       if (!controller.signal.aborted) { objectUrl = URL.createObjectURL(blob); setPreview(objectUrl); }
     }).catch(error => { if (!controller.signal.aborted) setError(error instanceof Error ? error.message : 'Image unavailable.'); });
     return () => { controller.abort(); if (objectUrl) URL.revokeObjectURL(objectUrl); };
-  }, [path, attempt]);
+  }, [path, attempt, workspaceId, workspaceSignal]);
   return <div className="space-y-2">
     <button type="button" aria-label={alt} aria-pressed={order > 0} onClick={onToggle}
       disabled={disabled || (!preview && !order)} className={`w-full border-2 rounded-sm overflow-hidden text-left disabled:opacity-60 ${order ? 'border-emerald-700' : 'border-[#E5E2DE]'}`}>
@@ -37,6 +38,7 @@ function ImageOption({ path, alt, filename, order, disabled, onToggle }: {
 export function CatalogImagePicker({ runId, sku, selectedImageUrls, onSaved, onClose }: {
   runId: string; sku: SkuData; selectedImageUrls: string[]; onSaved: (urls: string[]) => void; onClose: () => void;
 }) {
+  const { request: api } = useAppContext();
   const dialog = useRef<HTMLDialogElement>(null);
   const images = catalogImages(sku);
   const [selected, setSelected] = useState(() => selectedImageUrls.filter(url => images.some(image => image.url === url)));

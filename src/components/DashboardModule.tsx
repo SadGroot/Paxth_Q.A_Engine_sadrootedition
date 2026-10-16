@@ -15,7 +15,7 @@ import { shippingRegion } from '../lib/catalogFiles';
 type FilterType = "all" | "ready" | "cannot_qa" | "completed" | "failed";
 
 export function DashboardModule({ onCatalogJobCreated }: { onCatalogJobCreated?: (id: string) => void }) {
-  const { user, workspaceMode, catalogError, skuDataList, addParsedData, clearData, updateSku, scrapeSku, ingestSkuFile, removeSkus, isLoadingSkuData, jobs, addJobs, addNotification } = useAppContext();
+  const { user, workspaceMode, catalogError, skuDataList, addParsedData, clearData, updateSku, scrapeSku, ingestSkuFile, removeSkus, isLoadingSkuData, jobs, addJobs, addNotification, workspaceSignal } = useAppContext();
   const isCatalog = workspaceMode === 'catalog';
   const statusOf = (sku: SkuData) => isCatalog ? catalogStatus(sku) : sku.status;
   const [fileName, setFileName] = useState<string | null>(localStorage.getItem('lastFileName') || null);
@@ -352,6 +352,7 @@ export function DashboardModule({ onCatalogJobCreated }: { onCatalogJobCreated?:
       sheet.getRow(1).font = { bold: true };
       
       const buffer = await workbook.xlsx.writeBuffer();
+      workspaceSignal.throwIfAborted();
       const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
       saveAs(blob, "Catalog_QA_Results.xlsx");
       
@@ -507,7 +508,9 @@ export function DashboardModule({ onCatalogJobCreated }: { onCatalogJobCreated?:
         header, width: Math.max(header.length + 2, 18), style: { numFmt: '@' },
       }));
       worksheet.getRow(1).font = { bold: true };
-      saveAs(new Blob([await workbook.xlsx.writeBuffer()], {
+      const exportedBuffer = await workbook.xlsx.writeBuffer();
+      workspaceSignal.throwIfAborted();
+      saveAs(new Blob([exportedBuffer], {
         type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       }), 'Catalog_Input_Template.xlsx');
     } catch (error) {
@@ -523,7 +526,9 @@ export function DashboardModule({ onCatalogJobCreated }: { onCatalogJobCreated?:
         if (!getCommonAttributeSet(skus)) throw new Error('Open Catalog job Files in the Jobs tab to download a separate upload file for each attribute set.');
         const workbook = new ExcelJS.Workbook();
         populateCatalogWorksheet(workbook.addWorksheet('Catalog'), skus.map(sku => sku.catalog_state!));
-        saveAs(new Blob([await workbook.xlsx.writeBuffer()]), 'catalog-upload.xlsx');
+        const exportedBuffer = await workbook.xlsx.writeBuffer();
+        workspaceSignal.throwIfAborted();
+        saveAs(new Blob([exportedBuffer]), 'catalog-upload.xlsx');
         const omitted = skuDataList.length - skus.length;
         addNotification({ type: omitted ? 'warning' : 'success', title: 'Catalog Exported',
           message: `Exported ${skus.length} validated row(s); omitted ${omitted} SKU(s) without current completed catalog results. Review cell warnings in Jobs.` });
@@ -560,6 +565,7 @@ export function DashboardModule({ onCatalogJobCreated }: { onCatalogJobCreated?:
     });
     
     const buffer = await workbook.xlsx.writeBuffer();
+      workspaceSignal.throwIfAborted();
     saveAs(new Blob([buffer]), 'catalog-qa-results.xlsx');
   };
 

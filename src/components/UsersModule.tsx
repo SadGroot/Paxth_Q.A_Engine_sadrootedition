@@ -272,7 +272,7 @@ export function UsersModule() {
                             </div>
                             <div>
                               <div className="flex items-center gap-2">
-                                <span className="font-semibold text-[#1A1A1A]">{u.username}</span>
+                                <span className="font-semibold text-[#1A1A1A]">{u.username}</span><span className="block text-xs text-[#8C8882]">{u.keySlot || 'No API key assigned'}</span>
                                 {isCurrentAdmin && (
                                   <span className="text-[9px] uppercase px-1.5 py-0.2 bg-emerald-100 text-emerald-800 rounded font-bold">
                                     You (Current)
@@ -572,7 +572,7 @@ export function UsersModule() {
             </div>
             <h3 className="text-base font-serif font-medium text-[#1A1A1A]">Delete User Account</h3>
             <p className="text-xs text-[#8C8882] mt-2 leading-relaxed">
-              Are you sure you want to permanently delete the account for <strong className="text-[#1A1A1A]">{deletingUser.username}</strong>? This user will no longer be able to log in.
+              Are you sure you want to permanently delete the account for <strong className="text-[#1A1A1A]">{deletingUser.username}</strong>? This user will no longer be able to log in. Accounts with saved workspace data cannot be deleted. Their API key slot stays reserved after deletion.
             </p>
 
             <div className="mt-6 flex items-center justify-center gap-3">

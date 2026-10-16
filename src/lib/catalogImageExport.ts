@@ -2,8 +2,9 @@ import JSZip from 'jszip';
 import { CATALOG_IMAGE_SIZE, catalogImageContentBounds, catalogImageFilename, catalogImagePath, catalogImagePlacement, catalogImages } from './catalogImages';
 import type { SkuData } from '../hooks/useCatalogData';
 
-export async function prepareCatalogImage(path: string, signal?: AbortSignal): Promise<Blob> {
-  const response = await fetch(path, { credentials: 'same-origin', signal: AbortSignal.any([AbortSignal.timeout(35_000), ...(signal ? [signal] : [])]) });
+export async function prepareCatalogImage(path: string, signal?: AbortSignal, workspaceId?: string): Promise<Blob> {
+  const response = await fetch(path, { credentials: 'same-origin', headers: workspaceId ? { 'X-Workspace-Id': workspaceId } : {}, signal: AbortSignal.any([AbortSignal.timeout(35_000), ...(signal ? [signal] : [])]) });
+  signal?.throwIfAborted();
   if (!response.ok) {
     if (response.status === 401) window.dispatchEvent(new Event('session-expired'));
     const error = await response.json().catch(() => null);
@@ -36,7 +37,7 @@ export async function prepareCatalogImage(path: string, signal?: AbortSignal): P
 }
 
 export async function exportCatalogImages(runId: string, items: Array<{ sku: string; snapshot: SkuData; result?: SkuData; selectedImageUrls?: string[] }>,
-  progress: (done: number, total: number) => void): Promise<Blob> {
+  progress: (done: number, total: number) => void, workspaceId?: string, signal?: AbortSignal): Promise<Blob> {
   const files = items.flatMap(item => {
     const images = catalogImages(item.result || item.snapshot);
     return (item.selectedImageUrls || []).map((url, index) => {
@@ -51,10 +52,11 @@ export async function exportCatalogImages(runId: string, items: Array<{ sku: str
   progress(0, files.length);
   for (const [index, file] of files.entries()) {
     try {
-      const blob = await prepareCatalogImage(file.path);
+      const blob = await prepareCatalogImage(file.path, signal, workspaceId);
       zip.file(file.name, await blob.arrayBuffer());
     } catch (error) { throw new Error(`${file.name}: ${error instanceof Error ? error.message : 'Could not prepare image'}. No ZIP was downloaded.`); }
     progress(index + 1, files.length);
   }
+  signal?.throwIfAborted();
   return zip.generateAsync({ type: 'blob' });
 }

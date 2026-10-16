@@ -5,7 +5,7 @@ export async function transaction<T>(pool: Pool, work: (client: PoolClient) => P
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    // ponytail: serialize writes for this single-worker backend; split locks only if measured contention warrants it.
+    // Short mutations share a lock; network work always runs outside these transactions.
     await client.query('SELECT pg_advisory_xact_lock($1)', [DATA_LOCK]);
     const result = await work(client);
     await client.query('COMMIT');
@@ -22,13 +22,13 @@ export async function initializeDatabase(pool: Pool) {
       DO $$ BEGIN CREATE TYPE qa_status AS ENUM ('pending','ready','cannot_qa','running','completed','failed'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
       DO $$ BEGIN CREATE TYPE scrape_status AS ENUM ('success','failed','skipped_no_url'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
       CREATE TABLE IF NOT EXISTS sku_data (
-        id SERIAL PRIMARY KEY, sku TEXT NOT NULL UNIQUE, upload_attributes JSONB, source JSONB, raw_row JSONB,
+        id SERIAL PRIMARY KEY, sku TEXT NOT NULL, owner_id TEXT NOT NULL REFERENCES users(id) ON DELETE RESTRICT, upload_attributes JSONB, source JSONB, raw_row JSONB,
         status qa_status NOT NULL DEFAULT 'pending', attribute_set TEXT, attribute_set_id TEXT,
         scraped_markdown TEXT, scrape_status scrape_status, tokens_used JSONB, time_taken INTEGER,
         error TEXT, qa_result JSONB, export_data JSONB, last_job_id TEXT, revision INTEGER NOT NULL DEFAULT 0,
         created_at TIMESTAMP NOT NULL DEFAULT NOW()
       );
-      CREATE UNIQUE INDEX IF NOT EXISTS sku_data_sku_unique ON sku_data (sku);
+      CREATE UNIQUE INDEX IF NOT EXISTS sku_data_owner_sku_unique ON sku_data (owner_id,sku);
       ALTER TABLE sku_data ADD COLUMN IF NOT EXISTS attribute_set TEXT;
       ALTER TABLE sku_data ADD COLUMN IF NOT EXISTS qa_result JSONB;
       ALTER TABLE sku_data ADD COLUMN IF NOT EXISTS export_data JSONB;
@@ -43,7 +43,7 @@ export async function initializeDatabase(pool: Pool) {
       UPDATE sku_data SET scrape_metadata=jsonb_build_object('method','legacy','requestedUrl',source->>'url','finalUrl',NULL,'capturedAt',NULL)
         WHERE scrape_metadata IS NULL AND nullif(btrim(scraped_markdown),'') IS NOT NULL;
       CREATE TABLE IF NOT EXISTS jobs (
-        id TEXT PRIMARY KEY, name TEXT NOT NULL, created_at TEXT NOT NULL,
+        id TEXT PRIMARY KEY, owner_id TEXT NOT NULL REFERENCES users(id) ON DELETE RESTRICT, name TEXT NOT NULL, created_at TEXT NOT NULL,
         attribute_set TEXT, skus JSONB NOT NULL DEFAULT '[]', status TEXT NOT NULL DEFAULT 'pending',
         tokens_used JSONB, time_taken INTEGER, error TEXT
       );
@@ -71,18 +71,18 @@ export async function initializeDatabase(pool: Pool) {
 }
 
 export async function verifySchema(pool: Pool) {
-  const indexes = ['attribute_sets_normalized_name_idx', 'users_normalized_username_idx', 'job_runs_one_active', 'sku_data_sku_unique'];
+  const indexes = ['attribute_sets_normalized_name_idx', 'users_normalized_username_idx', 'job_runs_one_active', 'sku_data_owner_sku_unique'];
   for (const index of indexes) {
     const result = await pool.query(`SELECT i.indisvalid, i.indisunique FROM pg_index i WHERE i.indexrelid=to_regclass($1)`, [index]);
     if (!result.rows[0]?.indisvalid || !result.rows[0]?.indisunique) throw new Error(`Required unique index is unavailable: ${index}`);
   }
-  for (const table of ['users','sessions','sku_data','jobs','qa_agent_settings','provider_settings','job_runs','job_run_items','idq_jobs','idq_items']) {
+  for (const table of ['users','sessions','sku_data','jobs','qa_agent_settings','provider_settings','job_runs','job_run_items','idq_jobs','idq_items','user_key_assignments','workspace_provider_settings']) {
     await pool.query(`SELECT 1 FROM ${table} LIMIT 0`);
   }
-  await pool.query('SELECT sku,source,raw_row,upload_attributes,status,attribute_set,attribute_set_id,revision,qa_result,qa_revision,export_data,last_job_id,scraped_markdown,scrape_status,scrape_metadata,scrape_error,tokens_used,time_taken,error,catalog_state FROM sku_data LIMIT 0');
-  await pool.query('SELECT id,name,created_at,attribute_set,skus,status,tokens_used,time_taken,error,job_type,catalog_outputs FROM jobs LIMIT 0');
+  await pool.query('SELECT owner_id,sku,source,raw_row,upload_attributes,status,attribute_set,attribute_set_id,revision,qa_result,qa_revision,export_data,last_job_id,scraped_markdown,scrape_status,scrape_metadata,scrape_error,tokens_used,time_taken,error,catalog_state FROM sku_data LIMIT 0');
+  await pool.query('SELECT owner_id,id,name,created_at,attribute_set,skus,status,tokens_used,time_taken,error,job_type,catalog_outputs FROM jobs LIMIT 0');
   await pool.query('SELECT id,name,rules_markdown,catalog_headers,catalog_header_requirements FROM attribute_sets LIMIT 0');
-  await pool.query('SELECT id,status,configuration,owner_token FROM idq_jobs LIMIT 0');
+  await pool.query('SELECT owner_id,id,status,configuration,owner_token FROM idq_jobs LIMIT 0');
   await pool.query('SELECT job_id,position,input,progress,result,status FROM idq_items LIMIT 0');
   await pool.query('SELECT selected_image_urls FROM job_run_items LIMIT 0');
   const checks = await pool.query(`SELECT conname, convalidated FROM pg_constraint WHERE conrelid = 'jobs'::regclass AND conname IN ('jobs_skus_array','jobs_valid_status','jobs_valid_type')`);

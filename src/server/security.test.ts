@@ -125,6 +125,7 @@ const provider=createServer(async(req,res)=>{
 });
 const listen=(s:ReturnType<typeof createServer>)=>new Promise<void>(resolve=>s.listen(0,'127.0.0.1',resolve));
 try {
+  await initializeAuth(pool);
   await initializeDatabase(pool);
   await initializeQaConfiguration(drizzle(pool,{schema}));
   await initializeAuth(pool); await initializeProvider(pool); await initializeJobRuns(pool); await initializeIdq(pool); await verifySchema(pool);
@@ -133,19 +134,25 @@ try {
   await listen(provider);
   const providerAddress=provider.address() as any;
   process.env.LLM_BASE_URL=`http://127.0.0.1:${providerAddress.port}/v1`;process.env.LLM_API_KEY='test-secret-only';
-  process.env.NODE_ENV='test';process.env.CRAWL4AI_API_KEY='cloud-test-secret-only';
+  process.env.NODE_ENV='test';
+  for (let slot=1; slot<=5; slot++) process.env['AICREDITS_API_KEY_'+slot]=slot===2?'test-secret-only':'workspace-test-'+slot;
+  const nativeFetch=globalThis.fetch;
+  globalThis.fetch=(url,init)=>nativeFetch(String(url).startsWith('https://aicredits.in/v1') ? String(url).replace('https://aicredits.in/v1',process.env.LLM_BASE_URL!) : url,init);
+process.env.CRAWL4AI_API_KEY='cloud-test-secret-only';
   const app=express();app.use(express.json());
   server.on('request',app);await listen(server);
   const origin=`http://127.0.0.1:${(server.address() as any).port}`;process.env.APP_ORIGIN=origin;
-  registerAuth(app,pool);registerCatalogRoutes(app,pool,scrape);registerProviderRoutes(app,pool);registerScrapeRoutes(app,async(url,signal)=>collectProductPage(url,signal,await getProviderSettings(pool),collect));
+  registerAuth(app,pool);registerCatalogRoutes(app,pool,scrape);registerProviderRoutes(app,pool);registerScrapeRoutes(app,async(url,signal,ownerId)=>collectProductPage(url,signal,await getProviderSettings(pool,ownerId),collect));
   registerJobRunRoutes(app,pool);registerJobImageRoutes(app,pool);registerQaConfigurationRoutes(app,drizzle(pool,{schema}));
   app.use('/api', (_req,res)=>res.status(404).json({error:'Not found'}));
   app.use((err:any,_req:any,res:any,_next:any)=>res.status(err instanceof ApiError||err instanceof ProviderError?err.status:err.code==='23505'?409:503).json({error:err.message}));
   const password='test-only-strong-password';
   const hash=await hashPassword(password);
   await pool.query("INSERT INTO users(id,username,password,role) VALUES ('admin','Administrator',$1,'admin'),('user','Operator',$1,'user'),('other','Other',$1,'user')",[hash]);
+  await pool.query("INSERT INTO user_key_assignments(user_id,key_slot) VALUES('admin','AICREDITS_API_KEY_1'),('user','AICREDITS_API_KEY_2'),('other','AICREDITS_API_KEY_3')");
+  let adminCookie='';
   const request=async(path:string,method='GET',body?:unknown,cookie='',requestOrigin=origin)=>{
-    const response=await fetch(origin+path,{method,headers:{Origin:requestOrigin,'Content-Type':'application/json',Cookie:cookie},...(body===undefined?{}:{body:JSON.stringify(body)})});
+    const response=await fetch(origin+path,{method,headers:{Origin:requestOrigin,'Content-Type':'application/json',Cookie:cookie,...(cookie && cookie===adminCookie ? {'X-Workspace-Id':'user'} : {})},...(body===undefined?{}:{body:JSON.stringify(body)})});
     return {status:response.status,body:await response.json(),cookie:response.headers.get('set-cookie')};
   };
   assert.equal((await request('/api/catalog')).status,401);
@@ -154,7 +161,7 @@ try {
   assert.equal((await request('/api/auth/login','POST',{username:'Administrator',password},'','https://evil.example')).status,403);
   const adminLogin=await request('/api/auth/login','POST',{username:'administrator',password});assert.equal(adminLogin.status,200);
   assert.match(adminLogin.cookie!,/HttpOnly/);assert.match(adminLogin.cookie!,/SameSite=Strict/);assert.doesNotMatch(JSON.stringify(adminLogin.body),/password|scrypt/);
-  const admin=adminLogin.cookie!.split(';')[0];
+  const admin=adminLogin.cookie!.split(';')[0];adminCookie=admin;
   assert.equal((await request('/api/users','POST',{username:'Temporary',password,role:'user'},admin)).status,201);
   assert.equal((await request('/api/users','POST',{username:' temporary ',password,role:'user'},admin)).status,409);
   const user=(await request('/api/auth/login','POST',{username:'Operator',password})).cookie!.split(';')[0];
@@ -249,11 +256,11 @@ try {
   const job=await request('/api/jobs','POST',{id:'job',name:'Job',skus:['a','b'],attribute_set:'TestSet'},user);assert.equal(job.status,201);
   assert.equal(job.body[0].jobType,'qa','Existing clients default to QA jobs');
   const credentials={baseUrl:process.env.LLM_BASE_URL,key:process.env.LLM_API_KEY,legacyKey:process.env.AICREDITS_API_KEY};
-  delete process.env.LLM_BASE_URL;delete process.env.LLM_API_KEY;delete process.env.AICREDITS_API_KEY;
+  delete process.env.LLM_BASE_URL;delete process.env.LLM_API_KEY;delete process.env.AICREDITS_API_KEY;delete process.env.AICREDITS_API_KEY_2;
   await request('/api/catalog','POST',[{...sku('scrape-check'),source:{url:'https://8.8.8.8/product?variant=42'}}],user);
   const missingCredentials=await request('/api/catalog/scrape-check/scrape','POST',{expectedRevision:0},user);
   assert.equal(missingCredentials.status,503,'Conversion requires server credentials');
-  process.env.LLM_BASE_URL=credentials.baseUrl;process.env.LLM_API_KEY=credentials.key;
+  process.env.LLM_BASE_URL=credentials.baseUrl;process.env.LLM_API_KEY=credentials.key;process.env.AICREDITS_API_KEY_2='test-secret-only';
   const scraped=await request('/api/catalog/scrape-check/scrape','POST',{expectedRevision:0},user);
   assert.equal(scraped.status,200,'Scraping uses the shared provider');
   assert.equal(scraped.body.scrape_metadata.crawler,'crawl4ai');
@@ -344,22 +351,22 @@ try {
   assert.equal((await request('/api/catalog/scrape-check/scrape','POST',{expectedRevision:0},user)).status,404);
   duringScrape=undefined;
   await request('/api/catalog','DELETE',{skus:['scrape-check']},admin);
-  delete process.env.LLM_BASE_URL;delete process.env.LLM_API_KEY;delete process.env.AICREDITS_API_KEY;
+  delete process.env.LLM_BASE_URL;delete process.env.LLM_API_KEY;delete process.env.AICREDITS_API_KEY;delete process.env.AICREDITS_API_KEY_2;
   const missingProvider=await request('/api/jobs/job/runs','POST',{requestId:randomUUID(),mode:'all'},user);
   assert.equal(missingProvider.status,503);
-  assert.match(missingProvider.body.error,/LLM_BASE_URL.*LLM_API_KEY/,'Missing credentials return actionable configuration errors');
+  assert.match(missingProvider.body.error,/assigned workspace API key/,'Missing credentials return actionable configuration errors');
   assert.equal((await pool.query('SELECT count(*)::int AS count FROM job_runs')).rows[0].count,0,'A failed preflight saves no run');
   process.env.LLM_API_KEY=credentials.key;
   const partialProvider=await request('/api/jobs/job/runs','POST',{requestId:randomUUID(),mode:'all'},user);
   assert.equal(partialProvider.status,503);
-  assert.match(partialProvider.body.error,/LLM_BASE_URL.*LLM_API_KEY/);
-  process.env.LLM_BASE_URL=credentials.baseUrl;process.env.LLM_API_KEY=credentials.key;
+  assert.match(partialProvider.body.error,/assigned workspace API key/);
+  process.env.LLM_BASE_URL=credentials.baseUrl;process.env.LLM_API_KEY=credentials.key;process.env.AICREDITS_API_KEY_2='test-secret-only';
   if(credentials.legacyKey===undefined)delete process.env.AICREDITS_API_KEY;else process.env.AICREDITS_API_KEY=credentials.legacyKey;
   // Start and cancel must read their committed result without checking out a second connection.
   assert.equal((await request('/api/jobs','POST',{id:'pool-check',name:'Pool check',skus:['a']},user)).status,201);
   const singlePool=new Pool({connectionString:process.env.TEST_DATABASE_URL,options:`-c search_path=${namespace}`,max:1,connectionTimeoutMillis:1000,query_timeout:1000});
   const singleApp=express();singleApp.use(express.json());
-  singleApp.use((_req,res,next)=>{res.locals.user={id:'user',username:'Operator',role:'user'};next();});
+  singleApp.use((_req,res,next)=>{res.locals.user={id:'user',username:'Operator',role:'user'};res.locals.workspaceId='user';next();});
   registerJobRunRoutes(singleApp,singlePool);
   const singleServer=createServer(singleApp);await listen(singleServer);
   try {
@@ -369,7 +376,7 @@ try {
     const acceptedRun=await accepted.json() as any;
     const cancelled=await fetch(singleOrigin+`/api/job-runs/${acceptedRun.id}/cancel`,{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
     assert.equal(cancelled.status,200,'Cancellation reads its committed result using the same connection');
-    assert.equal((await cancelled.json() as any).status,'cancelling');
+    assert.equal((await cancelled.json() as any).status,'cancelled');
   } finally {
     await new Promise<void>(resolve=>singleServer.close(()=>resolve()));
     await singlePool.end();
@@ -383,7 +390,7 @@ try {
   assert.equal((await request('/api/jobs/job/runs','POST',runBody,user)).body.id,run.body.id);
   assert.equal((await request('/api/jobs/job/runs','POST',{...runBody,requestId:randomUUID()},user)).status,409);
   assert.equal((await request('/api/data','DELETE',undefined,admin)).status,409);
-  assert.equal((await request(`/api/job-runs/${run.body.id}/cancel`,'POST',{},other)).status,403);
+  assert.equal((await request(`/api/job-runs/${run.body.id}/cancel`,'POST',{},other)).status,404);
   const waitFor=async(check:()=>Promise<boolean>,label:string)=>{
     for(let i=0;i<160;i++){if(await check())return;await delay(100);}throw new Error(`Timed out: ${label}`);
   };
@@ -729,7 +736,7 @@ try {
   const generatedCatalog=await catalogRun(firstCatalog.body.id);
   const imageEvidence={...generatedCatalog.items[0].result,scraped_markdown:'## Product images\n- <https://cdn.example.com/first.jpg>\n- <https://cdn.example.com/second.jpg>',
     scrape_metadata:{method:'manual',requestedUrl:null,finalUrl:null,capturedAt:null}};
-  await pool.query("INSERT INTO jobs(id,name,created_at,job_type,skus) VALUES('catalog-image-fixture','Images',$1,'catalog','[\"image-sku\"]')",[new Date().toISOString()]);
+  await pool.query("INSERT INTO jobs(owner_id,id,name,created_at,job_type,skus) VALUES('user','catalog-image-fixture','Images',$1,'catalog','[\"image-sku\"]')",[new Date().toISOString()]);
   await pool.query(`INSERT INTO job_runs(id,job_id,request_id,actor_id,actor_name,mode,status,configuration)
     VALUES('image-fixture-run','catalog-image-fixture','image-test','user','Operator','all','completed',$1)`,
     [JSON.stringify({jobType:'catalog',catalogOutputs:{groups:[],shipping:null}})]);
@@ -741,7 +748,7 @@ try {
   assert.equal((await request(imageEndpoint,'PUT',selection,user,'https://evil.example')).status,403);
   assert.equal((await request(imageEndpoint,'PUT',selection,user)).status,200,'Operators can save image order');
   assert.deepEqual((await catalogRun('image-fixture-run')).items[0].selectedImageUrls,selection.selectedImageUrls);
-  assert.equal((await request(imageEndpoint,'PUT',{...selection,selectedImageUrls:[]},other)).status,409,'Shared workspace edits cannot overwrite stale image selections');
+  assert.equal((await request(imageEndpoint,'PUT',{...selection,selectedImageUrls:[]},other)).status,404,'Another workspace cannot read or change image selections');
   assert.equal((await request(imageEndpoint,'PUT',{...selection,selectedImageUrls:['https://evil.example/image.jpg']},user)).status,400);
   assert.equal((await request('/api/jobs/catalog-image-fixture','DELETE',undefined,admin)).status,200);
   assert.deepEqual(generatedCatalog.catalogHeaders,catalogHeaders,'Header edits do not change admitted runs');
@@ -1063,7 +1070,7 @@ try {
   assert.equal((await request('/api/jobs/three-category-job','DELETE',undefined,admin)).status,200);
 
   // Legacy regionless and mixed-region definitions can still generate Catalog files.
-  await pool.query("INSERT INTO jobs(id,name,created_at,job_type,attribute_set,skus) VALUES('legacy-shipping','Legacy', $1,'catalog','Hub',$2)",[new Date().toISOString(),JSON.stringify(['multi-missing','multi-qtr'])]);
+  await pool.query("INSERT INTO jobs(owner_id,id,name,created_at,job_type,attribute_set,skus) VALUES('user','legacy-shipping','Legacy', $1,'catalog','Hub',$2)",[new Date().toISOString(),JSON.stringify(['multi-missing','multi-qtr'])]);
   const legacyShipping=await startCatalog('unfinished',undefined,'legacy-shipping');assert.equal(legacyShipping.status,202);
   assert.equal(legacyShipping.body.catalogOutputs.shipping,null);assert.match(legacyShipping.body.catalogOutputs.shippingError,/unavailable/);
   // Simulate the saved singleton configuration of a run admitted before this upgrade.

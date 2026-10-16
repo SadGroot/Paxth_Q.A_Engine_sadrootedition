@@ -179,7 +179,7 @@ try {
     if(JSON.parse(init!.body as string).hold)await admissionHold;
     return Response.json({});
   };
-  const held=Array.from({length:2},()=>fetchChatCompletion(process.env.LLM_BASE_URL!,process.env.LLM_API_KEY!,{hold:true},AbortSignal.timeout(2000)));
+  const held=Array.from({length:4},()=>fetchChatCompletion(process.env.LLM_BASE_URL!,process.env.LLM_API_KEY!,{hold:true},AbortSignal.timeout(2000)));
   await delay(1);
   const queued=fetchChatCompletion(process.env.LLM_BASE_URL!,process.env.LLM_API_KEY!,{},AbortSignal.timeout(2000),async()=>{await delay(40);},20);
   await delay(40);admit();await Promise.all([...held,queued]);
@@ -201,10 +201,10 @@ try {
     return new Response(new ReadableStream({start(controller){setTimeout(()=>{active--;controller.enqueue(new TextEncoder().encode('{}'));controller.close();},30);}}));
   };
   await Promise.all(Array.from({length:10},()=>fetchChatCompletion(process.env.LLM_BASE_URL!,process.env.LLM_API_KEY!,{},AbortSignal.timeout(2000))));
-  assert.equal(maximum,2);
+  assert.equal(maximum,4);
   let release!:()=>void;const hold=new Promise<void>(resolve=>{release=resolve;});
   globalThis.fetch=async()=>{await hold;return Response.json({});};
-  const requests=Array.from({length:10},()=>fetchChatCompletion(process.env.LLM_BASE_URL!,process.env.LLM_API_KEY!,{},AbortSignal.timeout(2000)));
+  const requests=Array.from({length:12},()=>fetchChatCompletion(process.env.LLM_BASE_URL!,process.env.LLM_API_KEY!,{},AbortSignal.timeout(2000)));
   await delay(1);
   await assert.rejects(fetchChatCompletion(process.env.LLM_BASE_URL!,process.env.LLM_API_KEY!,{},AbortSignal.timeout(1000)),/queue is full/);
   release();await Promise.all(requests);
@@ -234,9 +234,12 @@ try {
   const sanitized=await providerResponseError(Response.json({error:{message:'Invalid test-only Bearer secret sk-other-secret'}},{status:401}), 'test-only');
   assert.equal(sanitized.status,502);assert.doesNotMatch(sanitized.message,/test-only|Bearer secret|sk-other-secret/);
   const app=express();app.use(express.json());
-  let role='admin';app.use((_req,res,next)=>{res.locals.user={role};next();});
+  process.env.AICREDITS_API_KEY_1='test-only';
+  let role='admin';app.use((_req,res,next)=>{res.locals.user={role};res.locals.workspaceId='test-user';next();});
   let settingsReads=0,settingsUnavailable=false;
-  const pool={query:async()=>{
+  const pool={query:async(sql:string)=>{
+    if(sql.includes('user_key_assignments'))return {rows:[{key_slot:'AICREDITS_API_KEY_1'}]};
+    if(sql.includes('workspace_provider_settings'))return {rows:[]};
     settingsReads++;
     if(settingsUnavailable)throw new Error('Injected settings outage');
     return {rows:[{settings:{...editableSettings(DEFAULT_SETTINGS),maxTokens:1,qaAgentMemory:'Must never enter connectivity prompt'},memory:'Must never enter connectivity prompt'}]};
@@ -287,11 +290,11 @@ try {
     assert.match((await request({modelName:'draft/qa'})).body.error,/invalid JSON/);
     globalThis.fetch=async()=>{throw new DOMException('Injected timeout','TimeoutError');};
     assert.equal((await request({modelName:'draft/qa'})).status,504);
-    delete process.env.LLM_BASE_URL;delete process.env.LLM_API_KEY;delete process.env.AICREDITS_API_KEY;
+    delete process.env.LLM_BASE_URL;delete process.env.LLM_API_KEY;delete process.env.AICREDITS_API_KEY;delete process.env.AICREDITS_API_KEY_1;
     globalThis.fetch=async()=>{throw new Error('No provider call is allowed without credentials');};
     const missing=await request({modelName:'draft/qa'});
-    assert.equal(missing.status,503);assert.match(missing.body.error,/Configure both/);
-    process.env.AICREDITS_API_KEY='legacy-test-only';
+    assert.equal(missing.status,503);assert.match(missing.body.error,/assigned workspace API key/);
+    process.env.AICREDITS_API_KEY='legacy-test-only';process.env.AICREDITS_API_KEY_1='legacy-test-only';
     globalThis.fetch=async(url,init)=>{
       assert.equal(String(url),'https://aicredits.in/v1/chat/completions');
       assert.equal(new Headers(init?.headers).get('Authorization'),'Bearer legacy-test-only');

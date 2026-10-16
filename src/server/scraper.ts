@@ -1,7 +1,7 @@
 import type { Express } from 'express';
 import { collectPage, ScrapeError, validateScrapeInput } from '../lib/cloudScrape';
 
-export function registerScrapeRoutes(app: Express, collect: typeof collectPage) {
+export function registerScrapeRoutes(app: Express, collect: (url: string, signal: AbortSignal, ownerId: string) => ReturnType<typeof collectPage>) {
   app.post('/api/scrape/preview', async (req, res) => {
     const controller = new AbortController();
     const disconnect = () => { if (!res.writableEnded) controller.abort(); };
@@ -11,7 +11,7 @@ export function registerScrapeRoutes(app: Express, collect: typeof collectPage) 
         throw new ScrapeError('Only a URL is accepted.', 400, 'INVALID_INPUT');
       }
       const { url } = validateScrapeInput(req.body);
-      const result = await collect(url, controller.signal);
+      const result = await collect(url, controller.signal, res.locals.workspaceId);
       controller.signal.throwIfAborted();
       if (!res.destroyed) res.json(result);
     } catch (error) {

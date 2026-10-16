@@ -1,11 +1,13 @@
+import { assignKeySlot, initializeWorkspaces } from './workspaces';
+import { ProviderError } from '../lib/chatCompletion';
 import { createHash, randomBytes, randomUUID, scrypt, timingSafeEqual } from 'node:crypto';
-import type { Express, Request, Response, NextFunction } from 'express';
+import { json, type Express, type Request, type Response, type NextFunction } from 'express';
 import type { Pool, PoolClient } from 'pg';
 
 const COOKIE = 'paxth_session';
 const SESSION_MS = 8 * 60 * 60 * 1000;
 const SCRYPT_OPTIONS = { N: 131072, r: 8, p: 1, maxmem: 192 * 1024 * 1024 };
-const USER_FIELDS = 'id, username, role, created_at AS "createdAt", last_login AS "lastLogin"';
+const USER_FIELDS = 'id, username, role, created_at AS "createdAt", last_login AS "lastLogin", (SELECT key_slot FROM user_key_assignments WHERE user_id=users.id) AS "keySlot"';
 const PASSWORD_PATTERN = /^scrypt\$[a-f0-9]{32}\$[a-f0-9]{128}$/;
 const DUMMY_HASH = `scrypt$${'00'.repeat(16)}$${'00'.repeat(64)}`;
 let activeHashes = 0;
@@ -60,6 +62,7 @@ export async function initializeAuth(pool: Pool) {
     CREATE INDEX IF NOT EXISTS sessions_user_id_idx ON sessions(user_id);
     CREATE INDEX IF NOT EXISTS sessions_expires_at_idx ON sessions(expires_at);
   `);
+  await initializeWorkspaces(pool);
 }
 
 function username(value: unknown) {
@@ -77,7 +80,7 @@ function role(value: unknown) {
 export function requiresAdmin(method: string, path: string) {
   const normalized = path.toLowerCase();
   return method === 'DELETE' || /^\/(users|chat)(\/|$)/.test(normalized) ||
-    (!['GET', 'HEAD', 'OPTIONS'].includes(method) && /^\/(attribute-sets|qa-agent-memory|provider-settings)(\/|$)/.test(normalized));
+    (!['GET', 'HEAD', 'OPTIONS'].includes(method) && /^\/(attribute-sets|qa-agent-memory|provider-settings|workspace-provider-settings)(\/|$)/.test(normalized));
 }
 
 function sessionToken(req: Request) {
@@ -89,13 +92,16 @@ function endpoint(handler: (req: Request, res: Response) => Promise<unknown>) {
   return async (req: Request, res: Response) => {
     try { await handler(req, res); }
     catch (error) {
-      if (error instanceof AuthError) {
+      if (error instanceof AuthError || error instanceof ProviderError) {
         if (error.status === 429) res.setHeader('Retry-After', '60');
         res.status(error.status).json({ error: error.message });
+      } else if (['23503', '23001'].includes((error as { code?: string })?.code || '')) {
+        res.status(409).json({ error: 'This account owns workspace data. Remove its data before deleting the account.' });
       } else if ((error as { code?: string })?.code === '23505') {
         res.status(409).json({ error: 'That username already exists.' });
       } else {
-        console.error('Authentication database operation failed.');
+        const code = (error as { code?: string })?.code;
+        console.error('Authentication database operation failed.', typeof code === 'string' && /^[0-9A-Z]{5}$/.test(code) ? code : 'unavailable');
         res.status(503).json({ error: 'Authentication service unavailable. Please retry.' });
       }
     }
@@ -151,7 +157,7 @@ export function registerAuth(app: Express, pool: Pool) {
   // ponytail: bounded process-local throttling; use a gateway/shared limiter for multiple server replicas.
   const attempts = new Map<string, { count: number; expires: number }>();
   let totalAttempts = { count: 0, expires: 0 };
-  app.post('/api/auth/login', endpoint(async (req, res) => {
+  app.post('/api/auth/login', json({ limit: '16kb' }), endpoint(async (req, res) => {
     const name = username(req.body?.username);
     if (typeof req.body?.password !== 'string' || !req.body.password || req.body.password.length > 256) throw new AuthError(400, 'Invalid login credentials.');
     const now = Date.now();
@@ -181,6 +187,7 @@ export function registerAuth(app: Express, pool: Pool) {
     } catch (error) { await client.query('ROLLBACK'); throw error; }
     finally { client.release(); }
     attempts.delete(key);
+    totalAttempts.count = Math.max(0, totalAttempts.count - 1);
     res.cookie(COOKIE, token, { ...cookieOptions, maxAge: SESSION_MS });
     res.json({ id: account.id, username: account.username, role: account.role, loginTime });
   }));
@@ -193,10 +200,17 @@ export function registerAuth(app: Express, pool: Pool) {
       if (!result.rows[0]) { res.clearCookie(COOKIE, cookieOptions); res.status(401).json({ error: 'Session expired. Sign in again.' }); return; }
       res.locals.user = result.rows[0];
       if (requiresAdmin(req.method, req.path) && res.locals.user.role !== 'admin') { res.status(403).json({ error: 'Administrator access required.' }); return; }
+      const ownerId = req.get('X-Workspace-Id') || res.locals.user.id;
+      if (ownerId !== res.locals.user.id) {
+        if (res.locals.user.role !== 'admin') { res.status(404).json({ error: 'Workspace not found.' }); return; }
+        if (!(await pool.query('SELECT id FROM users WHERE id=$1', [ownerId])).rowCount) { res.status(404).json({ error: 'Workspace not found.' }); return; }
+      }
+      res.locals.workspaceId = ownerId;
       next();
     } catch { res.status(503).json({ error: 'Authentication service unavailable.' }); }
   });
 
+  app.use('/api', json({ limit: '50mb' }));
   app.get('/api/auth/me', (_req, res) => { res.json(res.locals.user); });
   app.post('/api/auth/logout', endpoint(async (req, res) => {
     await pool.query('DELETE FROM sessions WHERE token_hash = $1', [hashSessionToken(sessionToken(req)!)]);
@@ -210,7 +224,12 @@ export function registerAuth(app: Express, pool: Pool) {
     const name = username(req.body?.username);
     const newRole = role(req.body?.role);
     const password = await hashPassword(req.body?.password);
-    const account = await withUserLock(pool, res.locals.user.id, async client => (await client.query(`INSERT INTO users (id, username, password, role) VALUES ($1, $2, $3, $4) RETURNING ${USER_FIELDS}`, [randomUUID(), name, password, newRole])).rows[0]);
+    const account = await withUserLock(pool, res.locals.user.id, async client => {
+      const id = randomUUID();
+      const keySlot = await assignKeySlot(client, id);
+      const { rows: [account] } = await client.query(`INSERT INTO users (id, username, password, role) VALUES ($1, $2, $3, $4) RETURNING ${USER_FIELDS}`, [id, name, password, newRole]);
+      return { ...account, keySlot };
+    });
     res.status(201).json(account);
   }));
   app.put('/api/users/:id', endpoint(async (req, res) => {

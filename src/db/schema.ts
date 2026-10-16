@@ -32,6 +32,7 @@ export const qaAgentSettings = pgTable('qa_agent_settings', {
 });
 
 export const jobs = pgTable('jobs', {
+  ownerId: text('owner_id').notNull().references(() => users.id, { onDelete: 'restrict' }),
   id: text('id').primaryKey(),
   name: text('name').notNull(),
   jobType: text('job_type').notNull().default('qa'),
@@ -50,7 +51,8 @@ export const scrapeStatusEnum = pgEnum('scrape_status', ['success', 'failed', 's
 
 export const skuData = pgTable('sku_data', {
   id: serial('id').primaryKey(),
-  sku: text('sku').notNull().unique(),
+  sku: text('sku').notNull(),
+  ownerId: text('owner_id').notNull().references(() => users.id, { onDelete: 'restrict' }),
   uploadAttributes: jsonb('upload_attributes'),
   source: jsonb('source'),
   rawRow: jsonb('raw_row'),
@@ -71,7 +73,7 @@ export const skuData = pgTable('sku_data', {
   lastJobId: text('last_job_id'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   revision: integer('revision').default(0).notNull(),
-});
+}, table => [uniqueIndex('sku_data_owner_sku_unique').on(table.ownerId, table.sku)]);
 
 // Legacy data only; retained in Drizzle so schema tools do not propose dropping saved rules.
 export const siteSelectors = pgTable('site_selectors', {
@@ -111,18 +113,28 @@ export const jobRuns = pgTable('job_runs', {
 export const jobRunItems = pgTable('job_run_items', {
   runId:text('run_id').notNull().references(()=>jobRuns.id,{onDelete:'cascade'}),sku:text('sku').notNull(),position:integer('position').notNull(),revision:integer('revision').notNull(),snapshot:jsonb('snapshot').notNull(),
   status:text('status').notNull(),attempts:integer('attempts').notNull().default(0),scrapeStarted:boolean('scrape_started').notNull().default(false),
+  providerState: jsonb('provider_state'),
   selectedImageUrls:jsonb('selected_image_urls').$type<string[]>().notNull().default([]),
   startedAt:timestamp('started_at',{withTimezone:true}),finishedAt:timestamp('finished_at',{withTimezone:true}),result:jsonb('result'),error:text('error'),
 },table=>[primaryKey({columns:[table.runId,table.sku]}),check('job_run_items_status_check',sql`${table.status} IN ('queued','running','completed','failed','cancelled','skipped')`),check('job_run_items_attempts_check',sql`${table.attempts} BETWEEN 0 AND 3`)]);
 
 export const idqJobs = pgTable('idq_jobs', {
+  ownerId: text('owner_id').notNull().references(() => users.id, { onDelete: 'restrict' }),
   id:text('id').primaryKey(),requestId:text('request_id').notNull(),actorId:text('actor_id').notNull(),actorName:text('actor_name').notNull(),
   name:text('name').notNull(),status:text('status').notNull().default('queued'),configuration:jsonb('configuration').notNull(),ownerToken:text('owner_token'),
   createdAt:timestamp('created_at',{withTimezone:true}).notNull().defaultNow(),startedAt:timestamp('started_at',{withTimezone:true}),finishedAt:timestamp('finished_at',{withTimezone:true}),error:text('error'),
-},table=>[uniqueIndex('idq_jobs_actor_id_request_id_key').on(table.actorId,table.requestId),
+},table=>[uniqueIndex('idq_jobs_owner_id_actor_id_request_id_key').on(table.ownerId,table.actorId,table.requestId),
   check('idq_jobs_status_check',sql`${table.status} IN ('queued','running','cancelling','cancelled','completed','needs_review','failed')`)]);
 export const idqItems = pgTable('idq_items', {
   jobId:text('job_id').notNull().references(()=>idqJobs.id,{onDelete:'cascade'}),position:integer('position').notNull(),input:jsonb('input').notNull(),
   progress:jsonb('progress').notNull().default({}),result:jsonb('result'),status:text('status').notNull().default('queued'),
   startedAt:timestamp('started_at',{withTimezone:true}),finishedAt:timestamp('finished_at',{withTimezone:true}),error:text('error'),
 },table=>[primaryKey({columns:[table.jobId,table.position]}),check('idq_items_status_check',sql`${table.status} IN ('queued','running','cancelled','completed','needs_review','failed')`)]);
+
+export const userKeyAssignments = pgTable('user_key_assignments', {
+  userId: text('user_id').primaryKey(), keySlot: text('key_slot').notNull().unique(),
+  assignedAt: timestamp('assigned_at', { withTimezone: true }).notNull().defaultNow(),
+}, table => [check('user_key_assignments_key_slot_check', sql`${table.keySlot} ~ '^AICREDITS_API_KEY_[1-5]$'`)]);
+export const workspaceProviderSettings = pgTable('workspace_provider_settings', {
+  ownerId: text('owner_id').primaryKey().references(() => users.id, { onDelete: 'cascade' }), settings: jsonb('settings').notNull().default({}),
+});

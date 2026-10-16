@@ -24,7 +24,7 @@ const waiting: Array<{ start: () => void }> = [];
 // ponytail: process-local admission matches the single backend; use a shared limiter before scaling replicas.
 async function acquire(signal: AbortSignal): Promise<() => void> {
   signal.throwIfAborted();
-  if (active < 2) active++;
+  if (active < 4) active++;
   else {
     if (waiting.length >= 8) throw new ProviderError("The model request queue is full. Retry shortly.", 503);
     await new Promise<void>((resolve, reject) => {
