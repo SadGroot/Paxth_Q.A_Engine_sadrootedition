@@ -1,5 +1,5 @@
 import { normalizeSettings, type AppSettings } from "./providerSettings";
-import { finalizeQaResult, QaValidationError, type prepareQaInput } from "./qaAgent";
+import { finalizeQaResult, QaValidationError, type QaValidationIssue, type prepareQaInput } from "./qaAgent";
 import { extractLLMResponseContent, parseLLMJsonResponse } from "./llmResponse";
 import { ProviderError } from './chatCompletion';
 
@@ -23,6 +23,7 @@ export function qaResponseDiagnostics(data: any) {
 
 export class QaResponseError extends ProviderError {
   diagnostics?: ReturnType<typeof qaResponseDiagnostics>;
+  validationIssues?: QaValidationIssue[];
   constructor(message: string, public kind: QaResponseFailure, public fieldPaths: string[] = []) { super(message); }
 }
 
@@ -66,8 +67,9 @@ export function parseQaResponse(data: any, input: QaInput) {
     return finalizeQaResult(result, input);
   } catch (error) {
     const failure = error instanceof QaResponseError ? error
-      : error instanceof QaValidationError ? new QaResponseError(error.message, 'invalid_schema', [error.fieldPath])
+      : error instanceof QaValidationError ? new QaResponseError(error.message, 'invalid_schema', error.issues.map(issue => issue.fieldPath))
       : new QaResponseError(error instanceof Error ? error.message : 'Invalid QA source evidence.', 'invalid_evidence');
+    if (error instanceof QaValidationError) failure.validationIssues = error.issues;
     failure.diagnostics = qaResponseDiagnostics(data);
     throw failure;
   }

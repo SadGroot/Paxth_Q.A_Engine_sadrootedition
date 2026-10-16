@@ -13,6 +13,7 @@ import { collectProductPage } from "./src/server/scrapePipeline.js";
 import { initializeJobRuns, registerJobRunRoutes, startJobWorker } from "./src/server/jobRunner.js";
 import { registerScrapeRoutes } from "./src/server/scraper.js";
 import { registerJobImageRoutes } from "./src/server/jobImages.js";
+import { registerDocumentIngestionRoutes } from "./src/server/documentIngestion.js";
 import { initializeIdq, registerIdqRoutes, startIdqWorker } from './src/server/idqJobs.js';
 
 async function startServer() {
@@ -40,6 +41,7 @@ async function startServer() {
   });
   registerQaConfigurationRoutes(app,db);
   registerCatalogRoutes(app,pool);
+  registerDocumentIngestionRoutes(app,pool);
   registerScrapeRoutes(app, async (url, signal) => collectProductPage(url, signal, await getProviderSettings(pool)));
   registerProviderRoutes(app,pool);
   registerJobRunRoutes(app,pool);

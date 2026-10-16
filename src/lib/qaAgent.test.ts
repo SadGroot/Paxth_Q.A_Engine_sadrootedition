@@ -144,6 +144,36 @@ const corrected = finalizeQaResult({ ...pass, issues: [issue], issue_count: 99 }
 assert.equal(corrected.qa_status, "fail");
 assert.equal(corrected.issue_count, 1);
 assert.equal(corrected.issues[0].cell_color, "red");
+const laptopRules = 'Severity: CRITICAL/HIGH/MEDIUM/LOW. Overall status: CORRECTIONS_REQUIRED or HOLD_IDENTITY. Return a separate attribute report and corrected row.';
+const laptopInput = prepareQaInput(sku, [{ ...set, rulesMarkdown: laptopRules }], DEFAULT_QA_AGENT_MEMORY, 40000);
+assert.match(laptopInput.messages[0].content, /Category rules define checks and their seriousness, never the output schema/);
+assert.match(laptopInput.messages[0].content, /CRITICAL\/HIGH to critical, MEDIUM to moderate, and LOW to minor/);
+assert.ok(laptopInput.messages[0].content.indexOf('APPLICATION REQUIREMENTS (take precedence') > laptopInput.messages[0].content.indexOf(laptopRules));
+const normalizedResults = [];
+for (const [label, severity, color, status] of [
+  [' CRITICAL ', 'critical', 'red', 'fail'], ['HIGH', 'critical', 'red', 'fail'],
+  [' Medium ', 'moderate', 'orange', 'warning'], ['LOW', 'minor', 'yellow', 'warning'],
+  ['MODERATE', 'moderate', 'orange', 'warning'], ['MINOR', 'minor', 'yellow', 'warning'],
+]) {
+  const raw = { ...pass, qa_status: ' PASS ', confidence: ' HIGH ', issues: [{ ...issue,
+    severity: label, cell_color: ' YELLOW ', issue_type: ' DATA_MISMATCH ' }] };
+  const before = structuredClone(raw);
+  const normalized = finalizeQaResult(raw, laptopInput);
+  assert.equal(normalized.qa_status, status);
+  assert.equal(normalized.confidence, 'high');
+  assert.equal(normalized.issue_count, 1);
+  assert.equal(normalized.issues[0].severity, severity);
+  assert.equal(normalized.issues[0].cell_color, color);
+  assert.equal(normalized.issues[0].issue_type, 'data_mismatch');
+  assert.equal(normalized.issues[0].suggested_fix, issue.suggested_fix);
+  assert.deepEqual(raw, before, 'Normalization must not alter the provider response');
+  normalizedResults.push(normalized);
+}
+assert.equal(finalizeQaResult({ ...pass, qa_status: ' FAIL ' }, input).qa_status, 'fail');
+assert.equal(finalizeQaResult({ ...pass, qa_status: ' WARNING ' }, input).qa_status, 'warning');
+for (const qa_status of ['approved', 'CORRECTIONS_REQUIRED', 'HOLD_IDENTITY', 'HOLD_SOURCE_CONFLICT', 'HOLD_INSUFFICIENT_SOURCE']) {
+  assert.throws(() => finalizeQaResult({ ...pass, qa_status }, input), /qa_status/, 'Unknown business verdicts are never guessed');
+}
 for (const incomplete of [
   { ...issue, suggested_fix: "" }, { ...issue, suggested_fix: " \n " },
   { ...issue, source_truth: "" }, { ...issue, source_truth: " \t " },
@@ -186,6 +216,7 @@ populateQaWorksheet(workbook.addWorksheet("General"), headers, [{ ...sku, qa_res
 populateQaWorksheet(workbook.addWorksheet("Correction"), headers, [{ ...sku, qa_result: corrected }]);
 populateQaWorksheet(workbook.addWorksheet("Name"), headers, [{ ...sku, qa_result: { ...corrected, issues: [{ ...issue, field: "name" }] } }]);
 populateQaWorksheet(workbook.addWorksheet("Unverified"), unverifiedSku.source.headerOrder, [{ ...unverifiedSku, qa_result: unverified }]);
+for (const [index, qa_result] of normalizedResults.entries()) populateQaWorksheet(workbook.addWorksheet(`Normalized${index}`), headers, [{ ...sku, qa_result }]);
 const loaded = new ExcelJS.Workbook();
 await loaded.xlsx.load(await workbook.xlsx.writeBuffer());
 const sheet = loaded.getWorksheet("General")!;
@@ -201,5 +232,10 @@ for (const column of ["C", "E"]) assert.equal(unknownSheet.getCell(`${column}2`)
 assert.match(JSON.stringify(unknownSheet.getCell("B2").note), /Verify the exact SKU's colour/);
 assert.match(JSON.stringify(unknownSheet.getCell("D2").note), /Verify packed shipping weight/);
 assert.match(JSON.stringify(unknownSheet.getCell("D2").note), /Needs verification: no verified replacement/);
+for (const [index, color] of ['FFFFCCCC', 'FFFFCCCC', 'FFFFE5B4', 'FFFFFFE0', 'FFFFE5B4', 'FFFFFFE0'].entries()) {
+  const cell = loaded.getWorksheet(`Normalized${index}`)!.getCell('C2');
+  assert.equal((cell.fill as ExcelJS.FillPattern).fgColor?.argb, color, 'Normalized severity survives Excel export');
+  assert.match(JSON.stringify(cell.note), /SAP specifies Other brand/);
+}
 
 console.log("QA agent input, validation, warning, and export assertions passed.");

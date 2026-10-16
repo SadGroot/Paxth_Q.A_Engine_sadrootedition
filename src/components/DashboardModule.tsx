@@ -15,7 +15,7 @@ import { shippingRegion } from '../lib/catalogFiles';
 type FilterType = "all" | "ready" | "cannot_qa" | "completed" | "failed";
 
 export function DashboardModule({ onCatalogJobCreated }: { onCatalogJobCreated?: (id: string) => void }) {
-  const { user, workspaceMode, catalogError, skuDataList, addParsedData, clearData, updateSku, scrapeSku, removeSkus, isLoadingSkuData, jobs, addJobs, addNotification } = useAppContext();
+  const { user, workspaceMode, catalogError, skuDataList, addParsedData, clearData, updateSku, scrapeSku, ingestSkuFile, removeSkus, isLoadingSkuData, jobs, addJobs, addNotification } = useAppContext();
   const isCatalog = workspaceMode === 'catalog';
   const statusOf = (sku: SkuData) => isCatalog ? catalogStatus(sku) : sku.status;
   const [fileName, setFileName] = useState<string | null>(localStorage.getItem('lastFileName') || null);
@@ -27,6 +27,9 @@ export function DashboardModule({ onCatalogJobCreated }: { onCatalogJobCreated?:
   const creatingJob = useRef(false);
   useEffect(() => { setFilter('all'); setSelectedSkus(new Set()); }, [workspaceMode]);
   const [isScraping, setIsScraping] = useState(false);
+  const [ingestingSku, setIngestingSku] = useState<string | null>(null);
+  const [ingestionError, setIngestionError] = useState<{ sku: string; message: string } | null>(null);
+  const ingestionPending = useRef(false);
   const [scrapeProgress, setScrapeProgress] = useState<{current: number, total: number} | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const scrapeRequest = useRef<AbortController | null>(null);
@@ -139,8 +142,28 @@ export function DashboardModule({ onCatalogJobCreated }: { onCatalogJobCreated?:
     setSelectedSkus(next);
   };
 
+  const handleAttachFile = async (sku: SkuData, file: File) => {
+    if (ingestionPending.current || isScraping) return;
+    ingestionPending.current = true;
+    setIngestingSku(sku.sku);
+    setIngestionError(null);
+    try {
+      await ingestSkuFile(sku, file);
+      if (!mounted.current) return;
+      addNotification({ type: 'success', title: 'File Ingested', message: `${file.name} was converted to Markdown and added to Scraped Data for ${sku.sku}.` });
+    } catch (error) {
+      if (!mounted.current) return;
+      const message = (error as Error).message || 'The file could not be ingested. Please retry.';
+      setIngestionError({ sku: sku.sku, message });
+      addNotification({ type: 'error', title: 'File Ingestion Failed', message });
+    } finally {
+      ingestionPending.current = false;
+      if (mounted.current) setIngestingSku(null);
+    }
+  };
+
   const handleScrapeSelected = async () => {
-    if (selectedSkus.size === 0 || isScraping) return;
+    if (selectedSkus.size === 0 || isScraping || ingestionPending.current) return;
     const controller = new AbortController();
     scrapeRequest.current = controller;
     setIsScraping(true);
@@ -178,7 +201,7 @@ export function DashboardModule({ onCatalogJobCreated }: { onCatalogJobCreated?:
   };
 
   const handleCreateJob = async () => {
-    if (selectedSkus.size === 0 || creatingJob.current) return;
+    if (selectedSkus.size === 0 || creatingJob.current || ingestionPending.current) return;
     
     const skusToProcess = skuDataList.filter(s => selectedSkus.has(s.sku));
     const attributeSet = getCommonAttributeSet(skusToProcess);
@@ -577,6 +600,7 @@ export function DashboardModule({ onCatalogJobCreated }: { onCatalogJobCreated?:
             <input
               type="file"
               ref={fileInputRef}
+              aria-label="Upload SKU spreadsheet"
               onChange={(e) => {
                 if (e.target.files && e.target.files.length > 0) {
                   handleFileUpload(e.target.files[0]);
@@ -685,11 +709,11 @@ export function DashboardModule({ onCatalogJobCreated }: { onCatalogJobCreated?:
 
               <button
                 onClick={handleCreateJob}
-                disabled={selectedSkus.size === 0 || isCreatingJob}
+                disabled={selectedSkus.size === 0 || isCreatingJob || ingestingSku !== null}
                 aria-busy={isCreatingJob}
                 className={cn(
                   "flex items-center gap-1.5 px-3 py-1.5 text-[10px] uppercase font-bold tracking-widest rounded-sm transition-colors",
-                  selectedSkus.size === 0 || isCreatingJob
+                  selectedSkus.size === 0 || isCreatingJob || ingestingSku !== null
                     ? "bg-[#F5F2EF] text-[#B8B4AE] cursor-not-allowed border border-[#E5E2DE]"
                     : "bg-[#1A1A1A] text-white hover:bg-[#333333] shadow-xs"
                 )}
@@ -700,10 +724,10 @@ export function DashboardModule({ onCatalogJobCreated }: { onCatalogJobCreated?:
               
               <button
                 onClick={handleScrapeSelected}
-                disabled={selectedSkus.size === 0 || isScraping}
+                disabled={selectedSkus.size === 0 || isScraping || ingestingSku !== null}
                 className={cn(
                   "flex items-center gap-1.5 px-3 py-1.5 text-[10px] uppercase font-bold tracking-widest rounded-sm transition-colors",
-                  selectedSkus.size === 0 || isScraping
+                  selectedSkus.size === 0 || isScraping || ingestingSku !== null
                     ? "bg-[#F5F2EF] text-[#B8B4AE] cursor-not-allowed border border-[#E5E2DE]"
                     : "bg-[#1A1A1A] text-white hover:bg-[#333333] shadow-xs"
                 )}
@@ -746,7 +770,7 @@ export function DashboardModule({ onCatalogJobCreated }: { onCatalogJobCreated?:
           {/* SKU Table View */}
           <div 
             className={cn(
-              "bg-white border border-[#E5E2DE] rounded-sm overflow-hidden text-sm shadow-xs transition-colors",
+              "bg-white border border-[#E5E2DE] rounded-sm overflow-x-auto text-sm shadow-xs transition-colors",
               isDragging ? "border-[#1A1A1A] ring-2 ring-[#1A1A1A]/10 bg-[#FDFCFB]" : ""
             )}
             onDragOver={onDragOver}
@@ -775,6 +799,7 @@ export function DashboardModule({ onCatalogJobCreated }: { onCatalogJobCreated?:
                     <th className="p-3 font-normal">SAP Available</th>
                     <th className="p-3 font-normal">URL Available</th>
                     <th className="p-3 font-normal">Scraped Data</th>
+                    <th className="p-3 font-normal">Attach File</th>
                     <th className="p-3 font-normal text-right">Actions</th>
                   </tr>
                 </thead>
@@ -796,6 +821,7 @@ export function DashboardModule({ onCatalogJobCreated }: { onCatalogJobCreated?:
                       <td className="p-3 text-[#1A1A1A]">{sku.attribute_set || <span className="text-[#8C8882] italic">Unassigned</span>}</td>
                       <td className="p-3">
                         <button
+                          disabled={ingestingSku === sku.sku}
                           onClick={() => {
                             setSapSaveError("");
                             setViewedSAP({ sku: sku.sku, sap: sku.source.sap || "", revision: sku.revision ?? 0 });
@@ -822,7 +848,7 @@ export function DashboardModule({ onCatalogJobCreated }: { onCatalogJobCreated?:
                             <span className="text-[#8C8882] text-xs">Pending</span>
                           ) : <span className="text-[#B8B4AE]">—</span>}
                           <button
-                            disabled={isScraping}
+                            disabled={isScraping || ingestingSku === sku.sku}
                             onClick={() => {
                               setMarkdownSaveError("");
                               setViewedMarkdown({ sku: sku.sku, markdown: sku.scraped_markdown || "", revision: sku.revision ?? 0 });
@@ -832,6 +858,28 @@ export function DashboardModule({ onCatalogJobCreated }: { onCatalogJobCreated?:
                             <FileText className="w-3 h-3" /> View/Edit Data
                           </button>
                         </div>
+                      </td>
+                      <td className="p-3">
+                        <label className={cn(
+                          "inline-flex items-center gap-1 text-xs text-blue-600 rounded-sm focus-within:ring-2 focus-within:ring-blue-600 focus-within:ring-offset-2",
+                          isScraping || ingestingSku !== null || isSavingMarkdown || isSavingSAP ? "opacity-50 cursor-not-allowed" : "cursor-pointer hover:underline"
+                        )}>
+                          <UploadCloud className="w-3 h-3" aria-hidden="true" />
+                          <span role="status">{ingestingSku === sku.sku ? 'Ingesting…' : 'Attach File'}</span>
+                          <input
+                            type="file"
+                            accept=".pdf,.xlsx,.xls"
+                            aria-label={`Attach file to ${sku.sku}`}
+                            className="sr-only"
+                            disabled={isScraping || ingestingSku !== null || isSavingMarkdown || isSavingSAP}
+                            onChange={event => {
+                              const file = event.currentTarget.files?.[0];
+                              event.currentTarget.value = '';
+                              if (file) void handleAttachFile(sku, file);
+                            }}
+                          />
+                        </label>
+                        {ingestionError?.sku === sku.sku && <p role="alert" className="mt-1 max-w-56 text-xs text-rose-600">{ingestionError.message}</p>}
                       </td>
                       <td className="p-3 text-right">
                          <button 
@@ -848,7 +896,7 @@ export function DashboardModule({ onCatalogJobCreated }: { onCatalogJobCreated?:
                   
                   {filteredList.length === 0 && (
                     <tr>
-                      <td colSpan={8} className="p-12 text-center">
+                      <td colSpan={9} className="p-12 text-center">
                         {skuDataList.length === 0 ? (
                           <div className="flex flex-col items-center justify-center gap-3 max-w-md mx-auto py-4">
                             <div className="w-12 h-12 bg-[#F5F2EF] rounded-full flex items-center justify-center text-[#1A1A1A]">

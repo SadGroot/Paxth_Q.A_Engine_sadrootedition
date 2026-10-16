@@ -136,5 +136,35 @@ export function useCatalogData(enabled = true, sessionKey?: string) {
       return true;
     } catch (error) { if (current === generation.current) setCatalogError((error as Error).message); return false; }
   }, []);
-  return { skuDataList, addParsedData, updateSku, scrapeSku, removeSkus, resetCatalog, refreshCatalog, isLoading, catalogError };
+  const ingestSkuFile = useCallback(async (sku: SkuData, file: File): Promise<SkuData> => {
+    const current = generation.current;
+    try {
+      if (!/\.(pdf|xlsx|xls)$/i.test(file.name)) throw new Error('Choose a PDF, .xlsx, or .xls file.');
+      if (!file.size) throw new Error('The file is empty.');
+      if (file.size > 10 * 1024 * 1024) throw new Error('Files must be 10 MiB or smaller.');
+      const dataBase64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result).split(',')[1]);
+        reader.onerror = () => reject(new Error('Could not read the selected file.'));
+        reader.readAsDataURL(file);
+      });
+      if (current !== generation.current) throw new Error('Your session changed. Select the file again.');
+      const saved = await api<SkuData>(`/api/catalog/${encodeURIComponent(sku.sku)}/ingest`, {
+        method: 'POST', body: JSON.stringify({ expectedRevision: sku.revision ?? 0, fileName: file.name, dataBase64 }),
+      });
+      if (current === generation.current) {
+        refreshSerial.current++;
+        setSkuDataList(previous => previous.map(item => item.sku === saved.sku && (saved.revision ?? 0) > (item.revision ?? 0) ? saved : item));
+        setCatalogError('');
+      }
+      return saved;
+    } catch (error) {
+      if (current === generation.current) {
+        await refreshCatalog().catch(() => {});
+        setCatalogError((error as Error).message);
+      }
+      throw error;
+    }
+  }, [refreshCatalog]);
+  return { skuDataList, addParsedData, updateSku, scrapeSku, ingestSkuFile, removeSkus, resetCatalog, refreshCatalog, isLoading, catalogError };
 }

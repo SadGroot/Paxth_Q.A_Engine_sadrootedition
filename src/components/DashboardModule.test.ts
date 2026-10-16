@@ -4,7 +4,7 @@ import { createServer } from "vite";
 import type { ScrapePreview } from '../lib/cloudScrape';
 import type { SkuData } from "../hooks/useCatalogData";
 import { DEFAULT_SETTINGS } from "../lib/providerSettings";
-import { prepareQaInput } from "../lib/qaAgent";
+import { finalizeQaResult, prepareQaInput } from "../lib/qaAgent";
 
 const sku = (id: string, updates: Partial<SkuData> = {}): SkuData => ({
   sku: id, revision: 0, status: "ready", attribute_set: "TV", upload_attributes: {},
@@ -710,6 +710,31 @@ try {
   await page.getByText('SKU: present-pending', { exact: true }).click();
   for (const text of ['Forged review summary', 'Forged finding', 'Forged replacement', 'No issues detected for this SKU!']) {
     assert.equal(await page.getByText(text, { exact: true }).count(), 0);
+  }
+  const reviewInput = prepareQaInput({ ...catalog[7], source: { sap: 'Brand: TestBrand' }, scraped_markdown: '' },
+    [{ id: 'tv', name: 'TV', rulesMarkdown: 'Check the supplied brand.', catalogHeaders: [], createdAt: 0, updatedAt: 0 }], 'Review evidence.', 40000);
+  for (const [severity, status, color] of [['', 'pass', ''], ['MEDIUM', 'warning', 'orange'], ['HIGH', 'fail', 'red']]) {
+    const qa = finalizeQaResult({ qa_status: ' PASS ', confidence: ' HIGH ', summary: `Verified browser ${status}`, issue_count: severity ? 1 : 0,
+      issues: severity ? [{ field: 'attributes__brand', issue_type: ' DATA_MISMATCH ', severity, cell_color: ' YELLOW ',
+        uploaded_value: 'OtherBrand', source_truth: 'TestBrand', explanation: 'SAP specifies TestBrand.', suggested_fix: 'TestBrand' }] : [],
+      source_notes: { sap_used: true, url_used: false, source_conflicts: [] } }, reviewInput);
+    assert.equal(qa.qa_status, status);
+    catalog[7] = { ...catalog[7], qa_result: qa, error: null, status: status === 'fail' ? 'failed' : 'completed' };
+    queuedRun.status = catalog[7].status;
+    queuedRun.items = [{ sku: catalog[7].sku, status: catalog[7].status, attempts: 1, snapshot: catalog[7], result: catalog[7], error: null }];
+    await page.reload();
+    await page.getByRole('button', { name: 'Jobs', exact: true }).click();
+    await page.getByRole('button', { name: 'View Results', exact: true }).click();
+    const heading = page.getByText('SKU: present-pending', { exact: true });
+    await heading.locator('..').getByText(status, { exact: true }).waitFor();
+    await heading.click();
+    assert.equal(await page.getByText('Job Execution Error', { exact: true }).count(), 0);
+    if (severity) {
+      const badge = page.getByText(`data_mismatch | ${qa.issues[0].severity}`, { exact: true });
+      await badge.waitFor();
+      assert.ok((await badge.locator('../..').getAttribute('class'))?.includes(`bg-${color}-50`));
+      await page.getByText('SAP specifies TestBrand.', { exact: true }).waitFor();
+    } else await page.getByText('No issues detected for this SKU!', { exact: true }).waitFor();
   }
   console.log('Browser checks passed: standalone URL previews, diagnostics, copy/downloads, revision-protected SKU saves, cancellation, QA settings, and historical review exclusion.');
 } finally {

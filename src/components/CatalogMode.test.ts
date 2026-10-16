@@ -214,30 +214,30 @@ try {
   ][index]]));
   for (const missing of inputHeaders) {
     const incomplete = inputHeaders.filter(header => header !== missing);
-    await page.locator('input[type=file]').setInputFiles({ name: 'incomplete.csv', mimeType: 'text/csv',
+    await page.getByLabel('Upload SKU spreadsheet', { exact: true }).setInputFiles({ name: 'incomplete.csv', mimeType: 'text/csv',
       buffer: Buffer.from(incomplete.join(',') + '\n' + incomplete.map(header => inputRow[header]).join(',')) });
     await page.getByRole('alert').filter({ hasText: `Catalog upload is missing required headers: ${missing}.` }).waitFor();
     assert.equal(importModes.length, 0, 'Missing headers must block the entire upload before any API write');
     assert.equal(catalog.length, 1);
   }
   const wrongCase = inputHeaders.map(header => header === 'attributes__brand' ? 'attributes__Brand' : header);
-  await page.locator('input[type=file]').setInputFiles({ name: 'wrong-case.csv', mimeType: 'text/csv',
+  await page.getByLabel('Upload SKU spreadsheet', { exact: true }).setInputFiles({ name: 'wrong-case.csv', mimeType: 'text/csv',
     buffer: Buffer.from(wrongCase.join(',') + '\n' + inputHeaders.map(header => inputRow[header]).join(',')) });
   await page.getByRole('alert').filter({ hasText: 'missing required headers: attributes__brand.' }).waitFor();
   const incompleteBook = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(incompleteBook, XLSX.utils.aoa_to_sheet([['sku', 'source__sap'], ['00042', 'Brand: TestBrand']]), 'Input');
-  await page.locator('input[type=file]').setInputFiles({ name: 'incomplete.xlsx', mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  await page.getByLabel('Upload SKU spreadsheet', { exact: true }).setInputFiles({ name: 'incomplete.xlsx', mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     buffer: XLSX.write(incompleteBook, { type: 'buffer', bookType: 'xlsx' }) });
   await page.getByRole('alert').filter({ hasText: 'missing required headers: base_code,' }).waitFor();
   assert.equal(importModes.length, 0);
   const obsoleteHeaders = inputHeaders.map(header => header === 'attributes__sap' ? 'source__sap' : header === 'attributes__url' ? 'source__url' : header === 'attributes__attribute_set' ? 'source__attribute_set' : header);
-  await page.locator('input[type=file]').setInputFiles({ name: 'obsolete.csv', mimeType: 'text/csv',
+  await page.getByLabel('Upload SKU spreadsheet', { exact: true }).setInputFiles({ name: 'obsolete.csv', mimeType: 'text/csv',
     buffer: Buffer.from(obsoleteHeaders.join(',') + '\n' + inputHeaders.map(header => inputRow[header]).join(',')) });
   await page.getByRole('alert').filter({ hasText: 'attributes__sap, attributes__url, attributes__attribute_set' }).waitFor();
   assert.equal(importModes.length, 0);
   for (const incorrect of ['attributes__product_type', 'attributes__Lulu_product_type']) {
     const incorrectHeaders = inputHeaders.map(header => header === 'attributes__lulu_product_type' ? incorrect : header);
-    await page.locator('input[type=file]').setInputFiles({ name: 'obsolete-product-type.csv', mimeType: 'text/csv',
+    await page.getByLabel('Upload SKU spreadsheet', { exact: true }).setInputFiles({ name: 'obsolete-product-type.csv', mimeType: 'text/csv',
       buffer: Buffer.from(incorrectHeaders.join(',') + '\n' + inputHeaders.map(header => inputRow[header]).join(',')) });
     await page.getByRole('alert').filter({ hasText: 'missing required headers: attributes__lulu_product_type.' }).waitFor();
     assert.equal(importModes.length, 0);
@@ -247,7 +247,7 @@ try {
   inputRow.source__sap = 'Wrong context'; inputRow.source__url = 'https://example.com/wrong'; inputRow.source__attribute_set = 'Wrong category';
   const csv = csvHeaders.join(',') + '\n' + [inputRow, { ...inputRow, sku: '00043', base_code: '00002',
     attributes__lulu_ean: '0001234567891', attribute__shipping_attribute: '002' }].map(row => csvHeaders.map(header => row[header]).join(',')).join('\n');
-  await page.locator('input[type=file]').setInputFiles({ name: 'catalog.csv', mimeType: 'text/csv', buffer: Buffer.from(csv) });
+  await page.getByLabel('Upload SKU spreadsheet', { exact: true }).setInputFiles({ name: 'catalog.csv', mimeType: 'text/csv', buffer: Buffer.from(csv) });
   const skuRow = (sku: string) => page.getByRole('row').filter({ has: page.getByRole('cell', { name: sku, exact: true }) });
   await skuRow('00042').waitFor();
   assert.equal(catalog[1].sku, '00042');
@@ -271,7 +271,7 @@ try {
   const sheet = XLSX.utils.aoa_to_sheet([inputHeaders, inputHeaders.map(header => numericRow[header])]);
   for (const [cell, format] of [['A2', '00000'], ['B2', '00000'], ['C2', '0000000000000'], ['H2', '000']]) sheet[cell].z = format;
   const book = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(book, sheet, 'Input');
-  await page.locator('input[type=file]').setInputFiles({ name: 'catalog.xlsx', mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  await page.getByLabel('Upload SKU spreadsheet', { exact: true }).setInputFiles({ name: 'catalog.xlsx', mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     buffer: XLSX.write(book, { type: 'buffer', bookType: 'xlsx' }) });
   await skuRow('00044').waitFor();
   assert.equal(catalog[3].sku, '00044');
@@ -284,7 +284,7 @@ try {
     attribute__shipping_attribute: '004' });
   templateSheet.addRow(inputHeaders.map(header => templateRow[header]));
   assert.equal(templateSheet.getRow(2).getCell(1).numFmt, '@', 'New product cells inherit text formatting');
-  await page.locator('input[type=file]').setInputFiles({ name: 'Catalog_Input_Template.xlsx',
+  await page.getByLabel('Upload SKU spreadsheet', { exact: true }).setInputFiles({ name: 'Catalog_Input_Template.xlsx',
     mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     buffer: Buffer.from(await templateWorkbook.xlsx.writeBuffer()) });
   await skuRow('00045').waitFor();
@@ -429,7 +429,7 @@ try {
   await page.reload();
   await mode.getByRole('button', { name: 'QA', exact: true }).waitFor();
   assert.equal(await mode.getByRole('button', { name: 'QA', exact: true }).getAttribute('aria-pressed'), 'true');
-  await page.locator('input[type=file]').setInputFiles({ name: 'qa-minimal.csv', mimeType: 'text/csv', buffer: Buffer.from('sku,source__sap\nqa-minimal,Brand: TestBrand\n') });
+  await page.getByLabel('Upload SKU spreadsheet', { exact: true }).setInputFiles({ name: 'qa-minimal.csv', mimeType: 'text/csv', buffer: Buffer.from('sku,source__sap\nqa-minimal,Brand: TestBrand\n') });
   await skuRow('qa-minimal').waitFor();
   assert.deepEqual(importModes, ['catalog', 'catalog', 'catalog', 'qa'], 'QA keeps accepting its existing input format');
 
@@ -441,7 +441,7 @@ try {
   attributeSets.push({ id: 'phone', name: 'Phone', rulesMarkdown: rules, catalogHeaders: phoneHeaders, createdAt: Date.now(), updatedAt: Date.now() });
   const multiRows = [{ ...inputRow, sku: '00050' }, { ...inputRow, sku: '00051', attributes__attribute_set: 'Hub' },
     { ...inputRow, sku: '00052', attributes__attribute_set: 'Phone' }];
-  await page.locator('input[type=file]').setInputFiles({ name: 'multi.csv', mimeType: 'text/csv',
+  await page.getByLabel('Upload SKU spreadsheet', { exact: true }).setInputFiles({ name: 'multi.csv', mimeType: 'text/csv',
     buffer: Buffer.from(inputHeaders.join(',') + '\n' + multiRows.map(row => inputHeaders.map(header => row[header as keyof typeof row]).join(',')).join('\n')) });
   await skuRow('00051').waitFor();
   await skuRow('00050').getByRole('cell').first().click();

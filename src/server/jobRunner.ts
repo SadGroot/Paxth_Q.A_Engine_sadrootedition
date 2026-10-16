@@ -370,7 +370,7 @@ async function executeRun(client: PoolClient, pool: Pool, run: any, owner: strin
             ...(!isCatalog && { qaRecovery }),
             ...(error instanceof QaResponseError && error.diagnostics && { diagnostics: error.diagnostics }),
             lastFailure: { status: error.status, retryable: error.retryable,
-              ...(error instanceof QaResponseError && { kind: error.kind, fieldPaths: error.fieldPaths }) } };
+              ...(error instanceof QaResponseError && { kind: error.kind, fieldPaths: error.fieldPaths, validationIssues: error.validationIssues }) } };
           await transaction(client, async () => {
             await assertOwner(client, run.id, owner);
             await client.query('UPDATE job_run_items SET error=$3,provider_state=$4 WHERE run_id=$1 AND sku=$2',

@@ -110,7 +110,7 @@ export async function completeQa(payload: unknown, signal: AbortSignal, options:
       signal.throwIfAborted();
       if (options.validateResponse && error instanceof QaResponseError) {
         if (['empty_answer', 'invalid_json', 'invalid_schema'].includes(error.kind) && !recovery.correctiveRetryUsed) {
-          recovery = { ...recovery, correctiveRetryUsed: true, feedback: error.message.slice(0, 600) };
+          recovery = { ...recovery, correctiveRetryUsed: true, feedback: error.message.slice(0, 2000) };
           error.retryable = true;
         } else if (error.kind === 'truncated' && selected?.model === DEFAULT_SETTINGS.modelName &&
             (request as typeof selected).reasoning_effort !== 'none') {

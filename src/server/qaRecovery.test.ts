@@ -45,6 +45,26 @@ try {
   assert.ok(requests.every(request => request.max_tokens === 32768 && request.messages[1].content === input.messages[1].content));
   assert.equal(payload.messages.length, 2, 'Recovery never mutates the original prompt');
 
+  const issue = { field: 'brand', issue_type: 'formatting', severity: 'major', cell_color: 'yellow',
+    uploaded_value: 'brand', source_truth: 'Brand', explanation: 'Use source casing.', suggested_fix: 'Brand' };
+  mock([() => completion({ ...valid, qa_status: 'CORRECTIONS_REQUIRED', issues: [issue, issue] }), () => completion()]);
+  await completeQa(payload, AbortSignal.timeout(5000), { validateResponse });
+  const feedback = requests[1].messages.at(-1).content;
+  for (const field of ['qa_status', 'issues[0].severity', 'issues[1].severity']) assert.ok(feedback.includes(field));
+  assert.match(feedback, /corrections_required/);
+  assert.match(feedback, /major/);
+  assert.equal(requests.length, 2, 'All invalid fields share one corrective retry');
+  assert.deepEqual(requests[1].messages.slice(0, -1), payload.messages, 'Original evidence and rules are unchanged');
+  assert.equal(requests[1].model, payload.model);
+  assert.equal(requests[1].reasoning_effort, payload.reasoning_effort);
+  assert.equal(requests[1].max_tokens, payload.max_tokens);
+  let boundedFeedback = '';
+  mock([() => completion({ ...valid, issues: Array.from({ length: 100 }, () => issue) }), () => completion()]);
+  await completeQa(payload, AbortSignal.timeout(5000), { validateResponse,
+    onAttemptError: async (_attempt, _error, recovery) => { boundedFeedback = recovery.feedback || ''; } });
+  assert.ok(boundedFeedback.length <= 2000);
+  assert.ok(!boundedFeedback.includes('issues[20]'));
+
   for (const bad of ['', '{"qa_status":', { ...valid, issue_count: '0' }]) {
     mock([() => completion(bad), () => completion()]);
     await completeQa(payload, AbortSignal.timeout(5000), { validateResponse });

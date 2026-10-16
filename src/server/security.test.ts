@@ -100,7 +100,12 @@ const provider=createServer(async(req,res)=>{
       await delay(30);
       if (sku === 'b' && attempt === 1) { res.writeHead(500); res.end('{}'); return; }
       if (sku === 'a' || attempt === 2) {
-        res.end(JSON.stringify({ choices: [{ finish_reason: 'stop', message: { content: JSON.stringify({ qa_status: 'approved' }) } }],
+        res.end(JSON.stringify({ choices: [{ finish_reason: 'stop', message: { content: JSON.stringify({
+          qa_status: 'CORRECTIONS_REQUIRED', confidence: 'high', summary: 'Needs correction', issue_count: 1,
+          issues: [{ field: 'name', issue_type: 'formatting', severity: 'major', cell_color: 'yellow',
+            uploaded_value: 'brand', source_truth: 'Brand', explanation: 'Use source casing.', suggested_fix: 'Brand' }],
+          source_notes: { sap_used: Boolean(catalogInput.source_sap), url_used: Boolean(catalogInput.scraped_markdown), source_conflicts: [] },
+        }) } }],
           usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 } })); return;
       }
     } finally { qaActive--; }
@@ -108,6 +113,14 @@ const provider=createServer(async(req,res)=>{
   const webUsed=payload.messages.some((message:any)=>message.content.includes('Retrieved product'));
   let sapUsed=false;
   try { sapUsed=Boolean(JSON.parse(payload.messages.find((message:any)=>message.role==='user').content).source_sap); } catch { /* Connectivity tests have no source payload. */ }
+  if (providerMode === 'qa-normalized') {
+    res.end(JSON.stringify({ choices: [{ finish_reason: 'stop', message: { content: JSON.stringify({
+      qa_status: ' PASS ', confidence: ' HIGH ', summary: 'Brand contradicts SAP', issue_count: 1,
+      issues: [{ field: 'attributes__brand', issue_type: ' DATA_MISMATCH ', severity: ' HIGH ', cell_color: ' YELLOW ',
+        uploaded_value: 'OtherBrand', source_truth: 'TestBrand', explanation: 'SAP specifies TestBrand.', suggested_fix: 'TestBrand' }],
+      source_notes: { sap_used: sapUsed, url_used: webUsed, source_conflicts: [] },
+    }) } }] })); return;
+  }
   res.end(JSON.stringify({choices:[{message:{content:JSON.stringify({qa_status:'pass',confidence:'high',summary:'Matches source',issue_count:0,issues:[],source_notes:{sap_used:sapUsed,url_used:webUsed,source_conflicts:[]}})}}],usage:{prompt_tokens:10,completion_tokens:5,total_tokens:15}}));
 });
 const listen=(s:ReturnType<typeof createServer>)=>new Promise<void>(resolve=>s.listen(0,'127.0.0.1',resolve));
@@ -512,7 +525,10 @@ try {
   assert.equal(qaPeak,1,'Even two workers cannot overlap SKU requests');
   assert.equal(previousSkuSaved,true,'The failed SKU is durably saved before the next dispatch');
   assert.ok(sequenceItems[0].finished_at<=sequenceItems[1].started_at);
-  assert.deepEqual(sequenceItems[0].provider_state.lastFailure.fieldPaths,['qa_status']);
+  assert.deepEqual(sequenceItems[0].provider_state.lastFailure.fieldPaths,['qa_status','issues[0].severity']);
+  assert.equal(sequenceItems[0].provider_state.lastFailure.validationIssues[0].received,'"corrections_required"');
+  assert.equal(sequenceItems[0].provider_state.lastFailure.validationIssues[1].received,'"major"');
+  assert.equal(sequenceItems[0].result.qa_result,undefined,'A malformed verdict never becomes a stored QA result');
   assert.equal(sequenceItems[0].provider_state.qaRecovery.correctiveRetryUsed,true);
   assert.equal(sequenceItems[1].provider_state.qaRecovery.correctiveRetryUsed,true);
   const sequenceRequests=providerRequests.slice(sequenceOffset);
@@ -520,6 +536,7 @@ try {
   assert.ok(sequenceRequests.every(request=>request.max_tokens===32768));
   assert.equal(sequenceRequests[4].reasoning_effort,'none');
   assert.match(sequenceRequests[4].messages.at(-1).content,/qa_status/);
+  assert.match(sequenceRequests[4].messages.at(-1).content,/issues\[0\].severity/);
   providerMode='success';
   const unfinishedRun=await request('/api/jobs/job/runs','POST',{requestId:randomUUID(),mode:'unfinished'},user);
   assert.equal(unfinishedRun.status,202);
@@ -527,6 +544,22 @@ try {
   stopWorker=startJobWorker(pool,scrape);
   await waitFor(async()=>(await request(`/api/job-runs/${unfinishedRun.body.id}`,'GET',undefined,user)).body.status==='completed','retry only failed SKU');
   await stopWorker();stopWorker=undefined;
+  providerMode='qa-normalized';
+  const normalizedRun=await request('/api/jobs/job/runs','POST',{requestId:randomUUID(),mode:'single',sku:'b'},user);
+  assert.equal(normalizedRun.status,202);
+  stopWorker=startJobWorker(pool,scrape);
+  await waitFor(async()=>(await request(`/api/job-runs/${normalizedRun.body.id}`,'GET',undefined,user)).body.status==='completed','normalized critical QA finding');
+  await stopWorker();stopWorker=undefined;
+  const normalizedItem=(await request(`/api/job-runs/${normalizedRun.body.id}`,'GET',undefined,user)).body.items.find((item:any)=>item.sku==='b');
+  assert.equal(normalizedItem.attempts,1,'Known vocabulary variations need no paid retry');
+  assert.equal(normalizedItem.status,'completed','A valid fail verdict completes execution successfully');
+  assert.equal(normalizedItem.error,null,'A valid fail verdict is not an execution error');
+  assert.equal(normalizedItem.result.error,null);
+  assert.equal(normalizedItem.result.qa_result.qa_status,'fail');
+  assert.equal(normalizedItem.result.qa_result.issues[0].severity,'critical');
+  assert.equal(normalizedItem.result.qa_result.issues[0].cell_color,'red');
+  assert.deepEqual((await pool.query("SELECT qa_result FROM sku_data WHERE sku='b'")).rows[0].qa_result,normalizedItem.result.qa_result);
+  providerMode='success';
   await request('/api/provider-settings','PUT',priorSettings,admin);
   // Old job snapshots still retrieve with the cloud without rewriting stored configuration.
   await pool.query("UPDATE sku_data SET scraped_markdown=NULL,scrape_status=NULL WHERE sku='b'");
