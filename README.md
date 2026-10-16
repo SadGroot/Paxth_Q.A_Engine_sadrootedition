@@ -407,7 +407,7 @@ New provenance uses `method: "cloud"`, `crawler: "crawl4ai"`, the formatter's `m
 | Cloud admission | One active, eight queued; 60-second queue wait |
 | Retrieval deadline after admission | 120 seconds, including DNS and response reading |
 | Cleanup deadline | Separate 120 seconds, including model admission/retries |
-| Job execution budget | Existing five minutes |s
+| Job execution budget | Existing five minutes | s
 | Response size | 4 MiB for each upstream response |
 | Markdown size | 200,000 characters, including appended source footer |
 
@@ -844,8 +844,6 @@ Start with paginated summary APIs, relevant progress polling, bulk/bounded write
 
 ## Further documentation
 
-- [Workbook rule completion phases](docs/attribute-template-all/workbook-phases.md): exactly 125 Excel files, five phases, saved per-header rules and explicit source blockers.
-- [Attribute-set workbook mappings](docs/attribute-template-all/README.md): the wider 138-set registry, source-derived formats, source gaps, safe import and validation.
 - [IDQ catalog enrichment](docs/idq.md): input modes, attribute requirements, traceable Excel output, durable research limits and verification.
 - [Agency Agents setup](docs/agency-agents.md): seven project review agents, pinned provenance, usage and integrity verification.
 - [Agency review — 15 October 2026](docs/agency-review-2026-10-15.md): current security, architecture, UI and deployment findings, validation evidence and prioritized recommendations.
