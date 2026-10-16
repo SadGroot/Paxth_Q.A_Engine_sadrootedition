@@ -224,7 +224,7 @@ try {
   }
   const { reasoningEffort: _reasoningEffort, deepseekReasoningEffort: _deepseekReasoningEffort, ...legacySettings } = editableSettings(DEFAULT_SETTINGS);
   assert.equal(validateSettings(legacySettings).reasoningEffort, 'low', 'Older API clients can omit the new setting');
-  assert.equal(validateSettings(legacySettings).deepseekReasoningEffort, 'medium');
+  assert.equal(validateSettings(legacySettings).deepseekReasoningEffort, 'low');
   for (const retired of ['scrapperModelName', 'navigationModelInitialized', 'scraperTimeout']) {
     assert.throws(() => validateSettings({ ...editableSettings(DEFAULT_SETTINGS), [retired]: 'retired' }), /Invalid/);
   }
@@ -260,7 +260,7 @@ try {
     assert.doesNotMatch(JSON.stringify(payloads),/test-only|Must never|qa_status|sku/);
     assert.equal((await request({})).body.purpose,'qa');
     assert.equal(payloads[1].model,DEFAULT_SETTINGS.modelName);
-    assert.equal(payloads[1].reasoning_effort, 'medium');
+    assert.equal(payloads[1].reasoning_effort, 'low');
     assert.equal((await request({ modelName: DEFAULT_SETTINGS.modelName, deepseekReasoningEffort: 'none' })).status, 200);
     assert.equal(payloads.at(-1).reasoning_effort, 'none', 'Connectivity tests use the displayed effort without saving');
     assert.equal((await request({ deepseekReasoningEffort: 'invalid' })).status, 400);

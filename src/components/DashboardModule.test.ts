@@ -600,7 +600,7 @@ try {
   assert.equal(await page.getByLabel('Navigation model', {exact:true}).count(),0);
   const reasoning = page.getByLabel('Reasoning level', { exact: true });
   assert.equal(await reasoning.isEnabled(), true);
-  assert.equal(await reasoning.inputValue(), 'medium', 'DeepSeek defaults to Medium');
+  assert.equal(await reasoning.inputValue(), 'low', 'DeepSeek defaults to Low');
   assert.deepEqual(await reasoning.locator('option').evaluateAll(options => options.map(option => (option as HTMLOptionElement).value)), ['auto', 'none', 'low', 'medium', 'high', 'max']);
   await reasoning.selectOption('medium');
   await page.getByLabel('Q&A model', { exact: true }).fill('z-ai/glm-5.3-flash');

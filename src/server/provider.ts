@@ -4,7 +4,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { fetchChatCompletion, ProviderError, providerResponseError } from '../lib/chatCompletion';
 import { DEFAULT_SETTINGS, editableSettings, normalizeSettings, type AppSettings } from '../lib/providerSettings';
 import { extractLLMResponseContent } from '../lib/llmResponse';
-import { buildQaRequest } from '../lib/qaRequest';
+import { buildQaRequest, QaResponseError, type QaRecoveryState, type QaResponseFailure } from '../lib/qaRequest';
 import { transaction } from './database';
 
 export function getProviderCredentials() {
@@ -52,10 +52,13 @@ export function validateSettings(value: any) {
 export async function completeQa(payload: unknown, signal: AbortSignal, options: {
   taskLabel?: 'QA' | 'Catalog' | 'Scraping' | 'IDQ';
   maxAttempts?: 1 | 2 | 3;
-  attempts?: number; beforeAttempt?: (attempt: number, payload: unknown) => Promise<void>;
-  lastError?: string | null; onAttemptError?: (attempt: number, error: ProviderError) => Promise<void>;
-  fallbackPayload?: unknown; lastFailure?: { status: number; retryable: boolean };
+  attempts?: number; beforeAttempt?: (attempt: number, payload: unknown, recovery: QaRecoveryState) => Promise<void>;
+  lastError?: string | null; onAttemptError?: (attempt: number, error: ProviderError, recovery: QaRecoveryState) => Promise<void>;
+  fallbackPayload?: unknown; lastFailure?: { status: number; retryable: boolean; kind?: QaResponseFailure };
   lastReasoningEffort?: string;
+  qaRecovery?: QaRecoveryState;
+  validateResponse?: (data: any) => void;
+  onResponse?: (data: any) => Promise<void>;
 } = {}) {
   const label = options.taskLabel || 'QA';
   const maxAttempts = options.maxAttempts ?? 3;
@@ -67,19 +70,25 @@ export async function completeQa(payload: unknown, signal: AbortSignal, options:
   if ((options.attempts ?? 0) >= maxAttempts) throw new ProviderError(exhaustedMessage);
   const { baseUrl, apiKey } = getProviderCredentials();
   let lastFailure = options.lastFailure;
-  let thinkingDisabled = options.lastReasoningEffort === 'none';
+  let recovery = { ...options.qaRecovery };
+  let thinkingDisabled = options.lastReasoningEffort === 'none' || recovery.thinkingDisabled === true;
   for (let attempt = (options.attempts ?? 0) + 1; attempt <= maxAttempts; attempt++) {
     signal.throwIfAborted();
     let request = attempt === 3 && options.fallbackPayload && lastFailure?.retryable &&
       [408, 500, 502, 503, 504, 529].includes(lastFailure.status) ? options.fallbackPayload : payload;
     const selected = request as { model?: string; reasoning_effort?: string };
-    if (selected?.model === DEFAULT_SETTINGS.modelName && (thinkingDisabled || lastFailure?.retryable &&
+    if (selected?.model === DEFAULT_SETTINGS.modelName && (thinkingDisabled || lastFailure?.retryable && !lastFailure.kind &&
         [400, 422, 408, 500, 502, 503, 504, 529].includes(lastFailure.status))) {
       request = { ...selected, reasoning_effort: 'none' };
       thinkingDisabled = true;
     }
+    if (options.validateResponse && recovery.feedback) {
+      const qa = request as { messages: unknown[] };
+      request = { ...qa, messages: [...qa.messages, { role: 'system', content:
+        `The previous answer failed QA output validation: ${recovery.feedback}\nReturn a fresh, complete QA JSON object using the original supplied evidence and application requirements. Do not omit findings or shorten complete replacement values.` }] };
+    }
     try {
-      const response = await fetchChatCompletion(baseUrl, apiKey, request, signal, () => options.beforeAttempt?.(attempt, request) ?? Promise.resolve(), 120_000);
+      const response = await fetchChatCompletion(baseUrl, apiKey, request, signal, () => options.beforeAttempt?.(attempt, request, recovery) ?? Promise.resolve(), 120_000);
       if (!response.ok) {
         const error = await providerResponseError(response, apiKey);
         // Only an explicit reasoning-parameter rejection can recover from a client error.
@@ -88,12 +97,32 @@ export async function completeQa(payload: unknown, signal: AbortSignal, options:
             /unsupported|not supported|invalid|not permitted|not allowed|must be|one of/i.test(error.message)) error.retryable = true;
         throw error;
       }
-      try { return await response.json(); } catch { throw new ProviderError('Model returned invalid JSON'); }
+      let data: any;
+      try { data = await response.json(); } catch {
+        throw options.validateResponse ? new QaResponseError('Model returned invalid JSON. Expected a complete chat-completion response.', 'invalid_json')
+          : new ProviderError('Model returned invalid JSON');
+      }
+      await options.onResponse?.(data);
+      options.validateResponse?.(data);
+      signal.throwIfAborted();
+      return data;
     } catch (error) {
       signal.throwIfAborted();
+      if (options.validateResponse && error instanceof QaResponseError) {
+        if (['empty_answer', 'invalid_json', 'invalid_schema'].includes(error.kind) && !recovery.correctiveRetryUsed) {
+          recovery = { ...recovery, correctiveRetryUsed: true, feedback: error.message.slice(0, 600) };
+          error.retryable = true;
+        } else if (error.kind === 'truncated' && selected?.model === DEFAULT_SETTINGS.modelName &&
+            (request as typeof selected).reasoning_effort !== 'none') {
+          recovery = { ...recovery, thinkingDisabled: true };
+          thinkingDisabled = true;
+          error.retryable = true;
+        }
+      }
       if (error instanceof ProviderError) {
-        lastFailure = { status: error.status, retryable: error.retryable };
-        await options.onAttemptError?.(attempt, error);
+        lastFailure = { status: error.status, retryable: error.retryable,
+          ...(error instanceof QaResponseError && { kind: error.kind }) };
+        await options.onAttemptError?.(attempt, error, recovery);
       }
       signal.throwIfAborted();
       if (!(error instanceof ProviderError) || !error.retryable || attempt === maxAttempts) throw error;

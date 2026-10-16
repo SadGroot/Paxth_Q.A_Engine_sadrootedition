@@ -21,7 +21,7 @@
     "db:studio": "drizzle-kit studio",
     "test:scraper": "tsx src/lib/productImages.test.ts && tsx src/lib/cloudScrape.test.ts && tsx src/lib/scrapeRequest.test.ts && tsx src/server/scraper.test.ts && tsx src/server/scrapePipeline.test.ts",
     "admin:bootstrap": "tsx scripts/bootstrap-admin.ts",
-    "test:provider": "tsx src/server/provider.test.ts",
+    "test:provider": "tsx src/server/provider.test.ts && tsx src/server/qaRecovery.test.ts",
     "test:auth": "tsx src/server/auth.test.ts",
     "test:security-db": "tsx src/server/security.test.ts",
     "test:catalog": "tsx src/server/catalog.test.ts",

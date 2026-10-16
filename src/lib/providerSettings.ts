@@ -19,10 +19,10 @@ export interface AppSettings {
 
 export const DEFAULT_SETTINGS: AppSettings = {
   llmProvider: "openai-compatible", baseUrl: "", providerConfigured: false, scraperConfigured: false,
-  modelName: "deepseek/deepseek-v4.1-flash", temperature: 0.1, maxTokens: 4096,
+  modelName: "deepseek/deepseek-v4.1-flash", temperature: 0.1, maxTokens: 32_768,
   scraperModelName: "deepseek/deepseek-v4.1-flash",
   reasoningEffort: 'low',
-  deepseekReasoningEffort: 'medium',
+  deepseekReasoningEffort: 'low',
   maxConcurrency: 1, maxRetries: 2,
   maxPageContentLength: 40_000, qaAgentMemory: DEFAULT_QA_AGENT_MEMORY,
 };

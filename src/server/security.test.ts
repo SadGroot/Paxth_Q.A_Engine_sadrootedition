@@ -31,6 +31,8 @@ const server=createServer();
 let stopWorker:(()=>Promise<void>)|undefined;
 let stopSecond:(()=>Promise<void>)|undefined;
 let calls=0, providerMode='success';
+const qaSequenceCalls = new Map<string, number>();
+let qaActive = 0, qaPeak = 0, previousSkuSaved = false;
 const providerRequests:any[]=[];
 const conversionRequests:any[]=[];
 const scrapeRequests:string[]=[];
@@ -85,6 +87,23 @@ const provider=createServer(async(req,res)=>{
   }
   if(payload.search_domain_filter) {
     res.end(JSON.stringify({choices:[{finish_reason:'stop',message:{content:JSON.stringify({status:'ok',markdown:'# Retrieved product\nBrand: TestBrand'})}}],citations:providerMode==='no-citations'?[]:payload.search_domain_filter}));return;
+  }
+  if (providerMode === 'qa-sequence') {
+    const sku = catalogInput.sku;
+    const attempt = (qaSequenceCalls.get(sku) || 0) + 1;
+    qaSequenceCalls.set(sku, attempt);
+    qaActive++; qaPeak = Math.max(qaPeak, qaActive);
+    try {
+      if (sku === 'b' && attempt === 1) {
+        previousSkuSaved = Boolean((await pool.query("SELECT 1 FROM job_run_items WHERE run_id=(SELECT id FROM job_runs WHERE status='running') AND sku='a' AND status='failed' AND finished_at IS NOT NULL AND error IS NOT NULL")).rowCount);
+      }
+      await delay(30);
+      if (sku === 'b' && attempt === 1) { res.writeHead(500); res.end('{}'); return; }
+      if (sku === 'a' || attempt === 2) {
+        res.end(JSON.stringify({ choices: [{ finish_reason: 'stop', message: { content: JSON.stringify({ qa_status: 'approved' }) } }],
+          usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 } })); return;
+      }
+    } finally { qaActive--; }
   }
   const webUsed=payload.messages.some((message:any)=>message.content.includes('Retrieved product'));
   let sapUsed=false;
@@ -174,7 +193,7 @@ try {
   assert.equal((await request('/api/provider-settings','PUT',{...editableSettings(DEFAULT_SETTINGS),scrapperModelName:'perplexity/sonar'},admin)).status,400);
   await initializeProvider(pool);
   assert.ok(!('scrapperModelName' in (await pool.query("SELECT settings FROM provider_settings WHERE id='default'")).rows[0].settings));
-  const configured={...editableSettings(DEFAULT_SETTINGS),modelName:'deepseek/deepseek-v4.1-flash',maxTokens:10000};
+  const configured={...editableSettings(DEFAULT_SETTINGS),modelName:'deepseek/deepseek-v4.1-flash',deepseekReasoningEffort:'medium',maxTokens:10000};
   assert.equal((await request('/api/provider-settings','PUT',configured,admin)).status,200);
   assert.ok(!('scrapperModelName' in (await request('/api/provider-settings','GET',undefined,user)).body));
   assert.equal((await request('/api/chat','POST',{modelName:'unsaved/qa'},admin)).status,200);
@@ -472,8 +491,42 @@ try {
   const effortHistory=(await request(`/api/job-runs/${effortRun.body.id}`,'GET',undefined,user)).body;
   assert.match(effortHistory.items.find((item:any)=>item.sku==='b').result.qa_result.summary,/thinking off/);
   const effortState=(await pool.query("SELECT provider_state FROM job_run_items WHERE run_id=$1 AND sku='b'",[effortRun.body.id])).rows[0].provider_state;
-  assert.deepEqual(effortState,{modelName:DEFAULT_SETTINGS.modelName,reasoningEffort:'none',lastFailure:{status:500,retryable:true}});
+  assert.equal(effortState.modelName,DEFAULT_SETTINGS.modelName);
+  assert.equal(effortState.reasoningEffort,'none');
+  assert.equal(effortState.maxTokens,10000);
+  assert.deepEqual(effortState.lastFailure,{status:500,retryable:true});
+  assert.deepEqual(effortState.diagnostics.usage,{prompt_tokens:10,completion_tokens:5,total_tokens:15});
   providerMode='success';
+  await request('/api/provider-settings','PUT',priorSettings,admin);
+  // A terminal format failure is committed before the next SKU's bounded recovery begins.
+  await request('/api/provider-settings','PUT',{...priorSettings,modelName:DEFAULT_SETTINGS.modelName,maxTokens:32768,deepseekReasoningEffort:'low'},admin);
+  providerMode='qa-sequence';
+  const sequenceOffset=providerRequests.length;
+  const sequenceRun=await request('/api/jobs/job/runs','POST',{requestId:randomUUID(),mode:'all'},user);
+  assert.equal(sequenceRun.status,202);
+  stopWorker=startJobWorker(pool,scrape);stopSecond=startJobWorker(pool,scrape);
+  await waitFor(async()=>(await request(`/api/job-runs/${sequenceRun.body.id}`,'GET',undefined,user)).body.status==='failed','sequential QA format recovery');
+  await stopWorker();stopWorker=undefined;await stopSecond();stopSecond=undefined;
+  const sequenceItems=(await pool.query('SELECT * FROM job_run_items WHERE run_id=$1 ORDER BY position',[sequenceRun.body.id])).rows;
+  assert.deepEqual(sequenceItems.map(item=>[item.sku,item.status,item.attempts]),[['a','failed',2],['b','completed',3]]);
+  assert.equal(qaPeak,1,'Even two workers cannot overlap SKU requests');
+  assert.equal(previousSkuSaved,true,'The failed SKU is durably saved before the next dispatch');
+  assert.ok(sequenceItems[0].finished_at<=sequenceItems[1].started_at);
+  assert.deepEqual(sequenceItems[0].provider_state.lastFailure.fieldPaths,['qa_status']);
+  assert.equal(sequenceItems[0].provider_state.qaRecovery.correctiveRetryUsed,true);
+  assert.equal(sequenceItems[1].provider_state.qaRecovery.correctiveRetryUsed,true);
+  const sequenceRequests=providerRequests.slice(sequenceOffset);
+  assert.deepEqual(sequenceRequests.map(request=>JSON.parse(request.messages[1].content).sku),['a','a','b','b','b']);
+  assert.ok(sequenceRequests.every(request=>request.max_tokens===32768));
+  assert.equal(sequenceRequests[4].reasoning_effort,'none');
+  assert.match(sequenceRequests[4].messages.at(-1).content,/qa_status/);
+  providerMode='success';
+  const unfinishedRun=await request('/api/jobs/job/runs','POST',{requestId:randomUUID(),mode:'unfinished'},user);
+  assert.equal(unfinishedRun.status,202);
+  assert.equal(unfinishedRun.body.items.find((item:any)=>item.sku==='b').status,'skipped','Completed SKUs are retained on an unfinished rerun');
+  stopWorker=startJobWorker(pool,scrape);
+  await waitFor(async()=>(await request(`/api/job-runs/${unfinishedRun.body.id}`,'GET',undefined,user)).body.status==='completed','retry only failed SKU');
+  await stopWorker();stopWorker=undefined;
   await request('/api/provider-settings','PUT',priorSettings,admin);
   // Old job snapshots still retrieve with the cloud without rewriting stored configuration.
   await pool.query("UPDATE sku_data SET scraped_markdown=NULL,scrape_status=NULL WHERE sku='b'");

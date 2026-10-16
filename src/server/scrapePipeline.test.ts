@@ -220,7 +220,7 @@ try {
   assert.equal(fallbackCollections, 1, 'A model outage never repeats cloud collection');
   assert.equal(fallbackResult.modelName, backupModel, 'Evidence records the actual backup model');
   assert.equal(fallbackResult.report.warnings.at(-1)?.code, 'MODEL_FALLBACK');
-  assert.equal(fallbackRequests[0].reasoning_effort, 'medium');
+  assert.equal(fallbackRequests[0].reasoning_effort, 'low');
   assert.equal(fallbackRequests[2].reasoning_effort, 'none', 'The last cleanup attempt keeps thinking off');
   fallbackRequests.length = 0;
   globalThis.fetch = async (_destination, init) => {
@@ -234,7 +234,7 @@ try {
   globalThis.fetch = async (_destination, init) => {
     const input = JSON.parse(init!.body as string); fallbackRequests.push(input);
     assert.deepEqual(input.response_format, { type: 'json_object' });
-    assert.equal(input.reasoning_effort, fallbackRequests.length === 1 ? 'medium' : 'none');
+    assert.equal(input.reasoning_effort, fallbackRequests.length === 1 ? 'low' : 'none');
     return fallbackRequests.length < 3 ? Response.json({}, { status: 500 }) : response();
   };
   assert.equal((await scrapeProductPage(url, AbortSignal.timeout(5000), { ...settings, scraperModelName: backupModel }, collect)).modelName, DEFAULT_SETTINGS.scraperModelName);

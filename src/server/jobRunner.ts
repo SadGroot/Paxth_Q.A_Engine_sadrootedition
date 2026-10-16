@@ -4,7 +4,7 @@ import type { Express } from 'express';
 import type { Pool, PoolClient } from 'pg';
 import type { SkuData } from '../hooks/useCatalogData';
 import { prepareQaInput } from '../lib/qaAgent';
-import { buildQaRequest, parseQaResponse } from '../lib/qaRequest';
+import { buildQaRequest, parseQaResponse, qaResponseDiagnostics, QaResponseError } from '../lib/qaRequest';
 import { hasCompletedQa, unreviewedRunSnapshot, withoutRawQaResult } from '../lib/jobRunState';
 import { normalizeSettings } from '../lib/providerSettings';
 import { scrapeProductPage } from './scrapePipeline';
@@ -229,8 +229,8 @@ async function assertOwner(client: PoolClient, runId: string, owner: string, all
 async function persistItem(client: PoolClient, run: any, owner: string, item: any, result: SkuData) {
   await transaction(client, async () => {
     await assertOwner(client, run.id, owner);
-    await client.query("UPDATE job_run_items SET status=$3,result=$4,error=$5,finished_at=now() WHERE run_id=$1 AND sku=$2 AND status='running'",
-      [run.id, item.sku, result.error ? 'failed' : 'completed', JSON.stringify(result), result.error ?? null]);
+    await client.query("UPDATE job_run_items SET status=$3,result=$4,error=$5,provider_state=$6,finished_at=now() WHERE run_id=$1 AND sku=$2 AND status='running'",
+      [run.id, item.sku, result.error ? 'failed' : 'completed', JSON.stringify(result), result.error ?? null, item.provider_state ? JSON.stringify(item.provider_state) : null]);
     // A result remains in history even when newer evidence prevents updating the live catalog.
     if (run.configuration.jobType === 'catalog') {
       await client.query('UPDATE sku_data SET catalog_state=$3 WHERE sku=$1 AND revision=$2',
@@ -341,25 +341,36 @@ async function executeRun(client: PoolClient, pool: Pool, run: any, owner: strin
       const payload = buildQaRequest(settings, input, isCatalog ? 'catalog' : 'qa').payload;
       const fallbackPayload = isCatalog && ['z-ai/glm-5.3-flash', 'z-ai/glm-5.3-flashx'].includes(payload.model)
         ? buildQaRequest({ ...settings, modelName: 'deepseek/deepseek-v4.1-flash', deepseekReasoningEffort: 'none' }, input, 'catalog').payload : undefined;
+      let parsedQa: ReturnType<typeof parseQaResponse> | undefined;
       const response = await completeQa(payload, execution, {
         taskLabel: isCatalog ? 'Catalog' : 'QA',
         attempts: item.attempts,
         lastError: item.error,
         fallbackPayload, lastFailure: item.provider_state?.lastFailure,
         lastReasoningEffort: item.provider_state?.reasoningEffort,
-        beforeAttempt: async (attempt, request) => {
+        qaRecovery: item.provider_state?.qaRecovery,
+        ...(!isCatalog && {
+          validateResponse: (data: any) => { parsedQa = parseQaResponse(data, input as ReturnType<typeof prepareQaInput>); },
+          onResponse: async (data: any) => { item.provider_state = { ...item.provider_state, diagnostics: qaResponseDiagnostics(data) }; },
+        }),
+        beforeAttempt: async (attempt, request, qaRecovery) => {
           execution.throwIfAborted();
           catalogModel = (request as typeof payload).model;
-          item.provider_state = { ...item.provider_state, modelName: catalogModel, reasoningEffort: (request as typeof payload).reasoning_effort };
+          item.provider_state = { ...item.provider_state, modelName: catalogModel, reasoningEffort: (request as typeof payload).reasoning_effort,
+            ...(!isCatalog && { maxTokens: (request as typeof payload).max_tokens, qaRecovery }) };
           await transaction(client, async () => {
             await assertOwner(client, run.id, owner);
             await client.query('UPDATE job_run_items SET attempts=$3,provider_state=$4 WHERE run_id=$1 AND sku=$2',
               [run.id, item.sku, attempt, JSON.stringify(item.provider_state)]);
           });
         },
-        onAttemptError: async (attempt, error) => {
+        onAttemptError: async (attempt, error, qaRecovery) => {
           execution.throwIfAborted();
-          item.provider_state = { ...item.provider_state, lastFailure: { status: error.status, retryable: error.retryable } };
+          item.provider_state = { ...item.provider_state,
+            ...(!isCatalog && { qaRecovery }),
+            ...(error instanceof QaResponseError && error.diagnostics && { diagnostics: error.diagnostics }),
+            lastFailure: { status: error.status, retryable: error.retryable,
+              ...(error instanceof QaResponseError && { kind: error.kind, fieldPaths: error.fieldPaths }) } };
           await transaction(client, async () => {
             await assertOwner(client, run.id, owner);
             await client.query('UPDATE job_run_items SET error=$3,provider_state=$4 WHERE run_id=$1 AND sku=$2',
@@ -379,7 +390,7 @@ async function executeRun(client: PoolClient, pool: Pool, run: any, owner: strin
           catalog_state: { ...catalog, headers: catalogMappingFor(run.configuration, snapshot.attribute_set).headers, status: 'completed',
             revision: item.revision, jobId: run.job_id, modelName: catalogModel, tokensUsed: catalogTokens, timeTaken } };
       } else {
-        const qa = parseQaResponse(response, input as ReturnType<typeof prepareQaInput>);
+        const qa = parsedQa!;
         if (reasoningNotice) qa.summary = `${qa.summary} ${reasoningNotice}`.trim();
         result = withResult(snapshot, qa, response.usage, Date.now() - start, run.job_id);
       }

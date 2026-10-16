@@ -14,13 +14,13 @@ assert.equal(settings.maxRetries,2);
 assert.equal(settings.maxTokens,10000);
 assert.equal(settings.scraperModelName, DEFAULT_SETTINGS.modelName);
 assert.equal(settings.reasoningEffort, 'low', 'Saved settings without a reasoning level default to low');
-assert.equal(settings.deepseekReasoningEffort, 'medium', 'Settings without an explicit effort use medium');
+assert.equal(settings.deepseekReasoningEffort, 'low', 'Settings without an explicit effort use low');
 for (const deepseekReasoningEffort of ['auto', 'none', 'low', 'medium', 'high', 'max'] as const) {
   assert.equal(normalizeSettings({ deepseekReasoningEffort }).deepseekReasoningEffort, deepseekReasoningEffort);
   assert.equal(editableSettings(normalizeSettings({ deepseekReasoningEffort })).deepseekReasoningEffort, deepseekReasoningEffort);
 }
 for (const deepseekReasoningEffort of [null, 'LOW', '', 1, {}, []]) {
-  assert.equal(normalizeSettings({ deepseekReasoningEffort } as any).deepseekReasoningEffort, 'medium');
+  assert.equal(normalizeSettings({ deepseekReasoningEffort } as any).deepseekReasoningEffort, 'low');
 }
 for (const reasoningEffort of ['low', 'high', 'max'] as const) {
   assert.equal(normalizeSettings({ reasoningEffort }).reasoningEffort, reasoningEffort);
@@ -32,7 +32,11 @@ for (const reasoningEffort of [null, 'none', 'medium', 'LOW', '', 1, {}, []]) {
 assert.equal(normalizeSettings({scraperModelName:' custom/scrape ',modelName:'qa'}).scraperModelName, 'custom/scrape');
 assert.equal(normalizeSettings({scraperModelName:' '}).scraperModelName, DEFAULT_SETTINGS.scraperModelName);
 assert.equal(editableSettings(normalizeSettings({scraperModelName:'saved/scrape'})).scraperModelName, 'saved/scrape');
-assert.equal(normalizeSettings({maxTokens:-1}).maxTokens,4096);
+assert.equal(normalizeSettings({maxTokens:-1}).maxTokens,32768);
+assert.equal(normalizeSettings().maxTokens,32768);
+const explicit = normalizeSettings({ maxTokens: 4096, deepseekReasoningEffort: 'medium' });
+assert.equal(explicit.maxTokens,4096,'New defaults preserve explicit saved token limits');
+assert.equal(explicit.deepseekReasoningEffort,'medium','New defaults preserve explicit saved effort');
 assert.equal(normalizeSettings({maxPageContentLength:0}).maxPageContentLength,40000);
 assert.equal(normalizeSettings({qaAgentMemory:' '}).qaAgentMemory,DEFAULT_SETTINGS.qaAgentMemory);
 assert.ok(!('baseUrl' in editableSettings(settings)));

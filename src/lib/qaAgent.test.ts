@@ -33,7 +33,7 @@ assert.equal(usableScrapedMarkdown({ ...browserEvidence, source: { url: 'example
 assert.equal(usableScrapedMarkdown({ ...browserEvidence, source: {}, scrape_metadata: { method: 'manual', requestedUrl: null, finalUrl: null, capturedAt: null } }), sku.scraped_markdown);
 const input = prepareQaInput(sku, [set], "Custom instructions", 40000);
 const requestSettings = normalizeSettings({
-  modelName: "deepseek/deepseek-v4.1-flash", temperature:0.3, maxTokens: 10000, maxConcurrency: 3, maxRetries: 2,
+  modelName: "deepseek/deepseek-v4.1-flash", temperature:0.3, maxTokens: 10000, deepseekReasoningEffort: 'medium', maxConcurrency: 3, maxRetries: 2,
 });
 const request = buildQaRequest({ ...requestSettings, baseUrl: "https://aicredits.in/v1/chat/completions" }, input);
 assert.deepEqual(request, {
@@ -77,7 +77,9 @@ for (const modelName of ['custom/catalog', 'z-ai/glm-5.3-flash-extra', 'deepseek
     ...payloadWithoutReasoning, model: modelName,
   }, 'Other Catalog models receive no model-specific reasoning control');
 }
-assert.equal(buildQaRequest({ ...requestSettings, maxTokens: 0 }, input).payload.max_tokens, 4096);
+assert.equal(buildQaRequest({ ...requestSettings, maxTokens: 0 }, input).payload.max_tokens, 32768);
+const exampleStart = input.messages[0].content.indexOf('\n{', input.messages[0].content.indexOf('Required JSON example'));
+assert.equal(JSON.parse(input.messages[0].content.slice(exampleStart)).issues[0].suggested_fix, '', 'The prompt contains a valid JSON example');
 const data = JSON.parse(input.messages[1].content);
 assert.deepEqual(data.uploaded_template, {
   SKU: "00123", name: "Original product", base_code: "0001", note: "Keep the plug suffix",

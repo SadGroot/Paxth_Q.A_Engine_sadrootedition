@@ -79,26 +79,32 @@ Record source conflicts in source_notes.source_conflicts. Set sap_used and url_u
 The application adds general warnings for unavailable mapping rules and truncated evidence; do not duplicate those issues. Still report any other incomplete checks and factual findings.
 Use critical/red, moderate/orange, minor/yellow. Return fail for critical findings, warning for other findings or incomplete checks, and pass only for a complete review without issues.
 
-Required JSON structure (choose one value from each enum):
+Allowed values: qa_status = pass, warning, fail; confidence = high, medium, low;
+issue_type = data_mismatch, missing_data, formatting, spelling_grammar, unsupported_claim;
+severity = minor, moderate, critical; cell_color = yellow, orange, red.
+All issue text fields must be strings, including uploaded_value and source_truth (use an empty string when unknown).
+issue_count must be a nonnegative integer; sap_used and url_used must be booleans; source_conflicts must be an array of strings.
+Keep explanations concise without omitting findings or shortening complete replacement cell values.
+Required JSON example (illustrative only; derive every finding and correction from this SKU's evidence):
 {
-  "qa_status": "pass" | "warning" | "fail",
-  "confidence": "high" | "medium" | "low",
+  "qa_status": "warning",
+  "confidence": "medium",
   "summary": "Short summary of findings",
-  "issue_count": number,
+  "issue_count": 1,
   "issues": [{
     "field": "Exact original column name, e.g. attributes__brand",
-    "issue_type": "data_mismatch" | "missing_data" | "formatting" | "spelling_grammar" | "unsupported_claim",
-    "severity": "minor" | "moderate" | "critical",
+    "issue_type": "unsupported_claim",
+    "severity": "moderate",
     "uploaded_value": "value from upload",
-    "source_truth": "value from source",
-    "explanation": "Clear explanation identifying the source",
-    "suggested_fix": "Complete corrected value or empty string",
-    "cell_color": "yellow" | "orange" | "red"
+    "source_truth": "",
+    "explanation": "The supplied SAP evidence does not verify this value; verified product evidence is needed.",
+    "suggested_fix": "",
+    "cell_color": "orange"
   }],
   "source_notes": {
-    "sap_used": boolean,
-    "url_used": boolean,
-    "source_conflicts": ["conflict"]
+    "sap_used": true,
+    "url_used": false,
+    "source_conflicts": []
   }
 }`;
 
@@ -148,22 +154,35 @@ export function prepareQaInput(sku: SkuData, attributeSets: AttributeSet[], memo
   };
 }
 
+export class QaValidationError extends Error {
+  constructor(public fieldPath: string, expected: string) {
+    super(`LLM returned an invalid QA result structure at ${fieldPath}. Expected ${expected}.`);
+  }
+}
+
 export function finalizeQaResult(result: any, input: ReturnType<typeof prepareQaInput>) {
   const isObject = (value: any) => value !== null && typeof value === "object" && !Array.isArray(value);
   const colors = { minor: "yellow", moderate: "orange", critical: "red" };
-  if (!isObject(result) || !["pass", "warning", "fail"].includes(result.qa_status) ||
-      !["high", "medium", "low"].includes(result.confidence) || typeof result.summary !== "string" ||
-      !Number.isInteger(result.issue_count) || result.issue_count < 0 || !Array.isArray(result.issues) ||
-      !isObject(result.source_notes) || typeof result.source_notes.sap_used !== "boolean" ||
-      typeof result.source_notes.url_used !== "boolean" || !Array.isArray(result.source_notes.source_conflicts) ||
-      !result.source_notes.source_conflicts.every((conflict: unknown) => typeof conflict === "string") ||
-      result.issues.some((issue: any) => !isObject(issue) ||
-        !["minor", "moderate", "critical"].includes(issue.severity) ||
-        !["yellow", "orange", "red"].includes(issue.cell_color) ||
-        !["data_mismatch", "missing_data", "formatting", "spelling_grammar", "unsupported_claim"].includes(issue.issue_type) ||
-        !["field", "uploaded_value", "source_truth", "explanation", "suggested_fix"].every(key => typeof issue[key] === "string"))) {
-    throw new Error("LLM returned an invalid QA result structure. Expected the application's QA JSON fields and allowed values.");
-  }
+  const requireField = (valid: boolean, path: string, expected: string) => { if (!valid) throw new QaValidationError(path, expected); };
+  const requireEnum = (value: unknown, path: string, values: string[]) => requireField(values.includes(value as string), path, values.join(', '));
+  requireField(isObject(result), '$', 'one JSON object');
+  requireEnum(result.qa_status, 'qa_status', ['pass', 'warning', 'fail']);
+  requireEnum(result.confidence, 'confidence', ['high', 'medium', 'low']);
+  requireField(typeof result.summary === 'string', 'summary', 'a string');
+  requireField(Number.isInteger(result.issue_count) && result.issue_count >= 0, 'issue_count', 'a nonnegative integer');
+  requireField(Array.isArray(result.issues), 'issues', 'an array');
+  requireField(isObject(result.source_notes), 'source_notes', 'an object');
+  for (const key of ['sap_used', 'url_used']) requireField(typeof result.source_notes[key] === 'boolean', `source_notes.${key}`, 'a boolean');
+  requireField(Array.isArray(result.source_notes.source_conflicts), 'source_notes.source_conflicts', 'an array of strings');
+  result.source_notes.source_conflicts.forEach((value: unknown, index: number) => requireField(typeof value === 'string', `source_notes.source_conflicts[${index}]`, 'a string'));
+  result.issues.forEach((issue: any, index: number) => {
+    const path = `issues[${index}]`;
+    requireField(isObject(issue), path, 'an object');
+    requireEnum(issue.severity, `${path}.severity`, ['minor', 'moderate', 'critical']);
+    requireEnum(issue.cell_color, `${path}.cell_color`, ['yellow', 'orange', 'red']);
+    requireEnum(issue.issue_type, `${path}.issue_type`, ['data_mismatch', 'missing_data', 'formatting', 'spelling_grammar', 'unsupported_claim']);
+    for (const key of ['field', 'uploaded_value', 'source_truth', 'explanation', 'suggested_fix']) requireField(typeof issue[key] === 'string', `${path}.${key}`, 'a string');
+  });
   if ((result.source_notes.sap_used && !input.sapAvailable) || (result.source_notes.url_used && !input.webAvailable) ||
       (!result.source_notes.sap_used && !result.source_notes.url_used)) {
     throw new Error("LLM did not use available source evidence correctly. QA requires SAP or product-page evidence.");

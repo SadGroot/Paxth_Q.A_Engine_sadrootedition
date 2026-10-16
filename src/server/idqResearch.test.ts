@@ -6,7 +6,7 @@ import { completeQa } from './provider';
 
 const input: IdqInput = { url: 'https://store.example/product', attributeSet: 'Phones', columns: ['attributes__url','attributes__attribute_set','sku','name','image_url'], values: { attributes__url: 'https://store.example/product', attributes__attribute_set: 'Phones', sku: '0001', name: 'Phone X100 Blue 128GB', image_url: '' } };
 const mapping: IdqMapping = { id: 'phones', name: 'Phones', headers: ['sku','name','capacity','color','image_url'], requirements: { sku:'mandatory',name:'mandatory',capacity:'mandatory',color:'optional',image_url:'optional' }, rules: '' };
-const config: IdqConfig = { mode: 'url', mappings:[mapping], settings: normalizeSettings({}), limits: IDQ_LIMITS };
+const config: IdqConfig = { mode: 'url', mappings:[mapping], settings: normalizeSettings({ deepseekReasoningEffort: 'medium' }), limits: IDQ_LIMITS };
 const page = (url: string) => ({ markdown: 'Phone X100 Blue 128GB. Capacity: 128GB. Color: Blue.', requestedUrl: url, finalUrl: null, capturedAt: null, status: 'collected' as const, receivedAt: 'now', report: { durationMs: 1, characters: 60, warnings: [] }, imageGalleries: [
   { id:'ads',label:'promotional carousel',images:[{identity:'ad',url:'https://cdn.example/ad.jpg',alt:'ad'}] },
   { id:'main',label:'product gallery',images:[{identity:'first',url:'https://cdn.example/first.jpg',alt:'first'}, {identity:'second',url:'https://cdn.example/second.jpg',alt:'second'}] },
