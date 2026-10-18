@@ -43,10 +43,11 @@ export async function ready(commit, base = root) {
   const origin = dotenv.parse(readFileSync(path.join(base, 'state/origin.env'))).APP_ORIGIN;
   assert.ok(validOrigin(origin), 'Missing or invalid preview origin.');
   const until = Date.now() + 90000;
+  let lastFailure = '';
   while (Date.now() < until) {
     try {
       for (const address of ['http://127.0.0.1:3200', origin]) {
-        const health = await fetch(address + '/healthz', { redirect: 'error', signal: AbortSignal.timeout(3000) });
+        const health = await fetch(address + '/healthz', { redirect: 'error', signal: AbortSignal.timeout(20000) });
         assert.equal(health.status, 200);
         assert.equal((await health.json()).status, 'ready');
         const version = await fetch(address + '/version.json', { redirect: 'error', signal: AbortSignal.timeout(3000) });
@@ -56,8 +57,9 @@ export async function ready(commit, base = root) {
         assert.equal(session.status, 401, 'Anonymous API access must remain protected.');
       }
       return true;
-    } catch { await delay(1000); }
+    } catch (error) { lastFailure = error.message; await delay(1000); }
   }
+  console.error('Readiness check failed: ' + lastFailure);
   return false;
 }
 

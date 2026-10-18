@@ -80,7 +80,9 @@ submissions during shutdown. Rerun a deferred GitHub deployment after jobs finis
 An older pipeline cannot deploy after `main` has moved forward.
 
 Local and public readiness, release identity and anonymous-session rejection must
-all pass. A failed compatible release restores the previous service and still
+all pass. Schema readiness gets a 20-second request timeout, matching the existing
+container health check and allowing sequential queries to the remote database.
+A failed compatible release restores the previous service and still
 fails the workflow. A failed initial release is stopped. Rollback never restores
 or overwrites the database. Normal deployments keep the tunnel process alive.
 

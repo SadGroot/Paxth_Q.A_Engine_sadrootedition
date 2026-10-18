@@ -35,6 +35,7 @@ def main():
     signal.signal(signal.SIGTERM, lambda *_: process.terminate())
     try:
         for line in process.stdout:
+            print(line.rstrip(), flush=True)
             match = URL.search(line)
             if match:
                 origin = match.group()
