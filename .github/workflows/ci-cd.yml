@@ -38,6 +38,7 @@ jobs:
             .cache/paxth-qa-*.tar.gz
             .cache/paxth-qa-*.tar.gz.sha256
           if-no-files-found: error
+          include-hidden-files: true
           retention-days: 7
 
   ci-database:
