@@ -1,0 +1,180 @@
+name: CI/CD
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ci-core:
+    name: ci-core
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: node scripts/deploy.test.mjs
+      - run: python3 -m unittest discover -s ops -p 'test_*.py'
+      - run: bash -n ops/deploy.sh ops/setup-vps.sh
+      - run: npm run build
+      - name: Package the tested release
+        run: node scripts/package-release.mjs "$GITHUB_SHA"
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: release-${{ github.sha }}
+          path: |
+            .cache/paxth-qa-*.tar.gz
+            .cache/paxth-qa-*.tar.gz.sha256
+          if-no-files-found: error
+          retention-days: 7
+
+  ci-database:
+    name: ci-database
+    needs: ci-core
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: paxth_qa_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      TEST_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/paxth_qa_test
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run test:security-db
+      - run: npm run test:qa-config-db
+      - run: npm run test:idq-db
+      - run: npm run test:workspaces-db
+      - run: npm run test:workspace-migration-db
+      - run: node scripts/deploy.test.mjs
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          name: release-${{ github.sha }}
+          path: .cache/artifact
+      - name: Smoke-test the packaged release
+        shell: bash
+        run: |
+          cd .cache/artifact
+          sha256sum -c "paxth-qa-$GITHUB_SHA.tar.gz.sha256"
+          mkdir extracted
+          tar -xzf "paxth-qa-$GITHUB_SHA.tar.gz" -C extracted
+          cd ../..
+          SCRAPER_TEST_RELEASE_DIR="$PWD/.cache/artifact/extracted" npm run test:scrape-production
+
+  ci-browser:
+    name: ci-browser
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright-core install --with-deps chromium
+      - run: npm run test:sap-editor
+      - run: npm run test:catalog-browser
+      - run: npm run test:catalog-images-browser
+      - run: npm run test:document-ingestion-browser
+      - run: npm run test:idq-browser
+      - run: npm run test:workspace-browser
+
+  deploy:
+    name: Deploy secondary VPS app
+    needs: [ci-core, ci-database, ci-browser]
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment:
+      name: vps-preview
+      url: ${{ steps.deploy.outputs.url }}
+    concurrency:
+      group: paxth-qa-vps
+      cancel-in-progress: false
+    env:
+      VPS_HOST: ${{ vars.VPS_HOST }}
+      VPS_PORT: ${{ vars.VPS_PORT }}
+      VPS_USER: paxth-qa
+    steps:
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          name: release-${{ github.sha }}
+          path: artifact
+      - name: Reject a superseded main release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          latest=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq '.object.sha')
+          test "$latest" = "$GITHUB_SHA" || { echo 'Main has advanced; deploy its newer tested release instead.'; exit 1; }
+      - name: Configure app-specific SSH access
+        env:
+          DEPLOY_KEY: ${{ secrets.VPS_SSH_KEY }}
+          HOST_KEYS: ${{ vars.VPS_KNOWN_HOSTS }}
+        run: |
+          test -n "$VPS_HOST" && test -n "$VPS_PORT" && test -n "$DEPLOY_KEY" && test -n "$HOST_KEYS"
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$DEPLOY_KEY" > ~/.ssh/id_ed25519
+          printf '%s\n' "$HOST_KEYS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/id_ed25519 ~/.ssh/known_hosts
+      - name: Transfer and activate the tested release
+        id: deploy
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd artifact
+          sha256sum -c "paxth-qa-$GITHUB_SHA.tar.gz.sha256"
+          scp -P "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes "paxth-qa-$GITHUB_SHA.tar.gz" "paxth-qa-$GITHUB_SHA.tar.gz.sha256" "$VPS_USER@$VPS_HOST:/opt/paxth-qa/incoming/"
+          ssh -p "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" bash -s -- "$GITHUB_SHA" <<'REMOTE'
+          set -euo pipefail
+          sha="$1"
+          [[ "$sha" =~ ^[a-f0-9]{40}$ ]]
+          cd /opt/paxth-qa/incoming
+          sha256sum -c "paxth-qa-$sha.tar.gz.sha256"
+          if [[ ! -d "/opt/paxth-qa/releases/$sha" ]]; then
+            staging=$(mktemp -d /opt/paxth-qa/releases/.unpack-XXXXXX)
+            trap 'rm -rf "$staging"' EXIT
+            tar -xzf "paxth-qa-$sha.tar.gz" -C "$staging" --no-same-owner
+            mv "$staging" "/opt/paxth-qa/releases/$sha"
+          fi
+          /bin/bash /opt/paxth-qa/ops/deploy.sh "$sha"
+          rm -f "paxth-qa-$sha.tar.gz" "paxth-qa-$sha.tar.gz.sha256"
+          REMOTE
+          url=$(ssh -p "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" cat /opt/paxth-qa/state/url.txt)
+          [[ "$url" =~ ^https://[a-z0-9-]+\.trycloudflare\.com$ ]]
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+          printf 'Deployed `%s`: [%s](%s)\n' "$GITHUB_SHA" "$url" "$url" >> "$GITHUB_STEP_SUMMARY"
+      - name: Remove runner SSH credentials
+        if: always()
+        run: rm -f ~/.ssh/id_ed25519 ~/.ssh/known_hosts

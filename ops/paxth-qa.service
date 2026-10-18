@@ -1,0 +1,36 @@
+[Unit]
+Description=Paxth QA secondary application
+After=network-online.target
+Wants=network-online.target
+ConditionPathExists=/opt/paxth-qa/current/dist/server.mjs
+ConditionPathExists=/opt/paxth-qa/state/origin.env
+ConditionPathExists=!/opt/paxth-qa/state/deployment-failed
+
+[Service]
+Type=simple
+User=paxth-qa
+Group=paxth-qa
+WorkingDirectory=/opt/paxth-qa/current
+EnvironmentFile=/etc/paxth-qa/app.env
+EnvironmentFile=/opt/paxth-qa/state/origin.env
+Environment=NODE_ENV=production HOST=127.0.0.1 PORT=3200 NODE_OPTIONS=--max-old-space-size=384
+ExecStart=/opt/paxth-qa/current/runtime/node dist/server.mjs
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=25
+MemoryHigh=384M
+MemoryMax=512M
+OOMScoreAdjust=500
+CPUQuota=50%
+TasksMax=128
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/paxth-qa/state
+UMask=0077
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

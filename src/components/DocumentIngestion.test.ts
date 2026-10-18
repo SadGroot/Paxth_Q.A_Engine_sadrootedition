@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { DEFAULT_SETTINGS } from '../lib/providerSettings';
 import * as XLSX from 'xlsx';
 import { chromium } from 'playwright-core';
 import { createServer } from 'vite';
@@ -32,6 +33,7 @@ try {
     if (path === '/api/auth/me') return route.fulfill({ json: { id: 'uploader', username: 'Uploader', role: 'user' } });
     if (path === '/api/jobs') return route.fulfill({ json: [] });
     if (path === '/api/db-status') return route.fulfill({ json: { status: 'connected' } });
+    if (path === '/api/workspace-provider-settings') return route.fulfill({ json: DEFAULT_SETTINGS });
     if (path === '/api/qa-configuration') return route.fulfill({ json: { qaAgentMemory: '', attributeSets: [] } });
     if (path === '/api/catalog') { refreshes++; return route.fulfill({ json: [item] }); }
     if (path === `/api/catalog/${encodeURIComponent(item.sku)}/ingest`) {

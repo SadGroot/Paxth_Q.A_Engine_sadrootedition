@@ -1,0 +1,20 @@
+[Unit]
+Description=Paxth QA temporary HTTPS tunnel
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=paxth-qa
+Group=paxth-qa
+ExecStart=/usr/bin/python3 /opt/paxth-qa/ops/tunnel.py
+Restart=always
+RestartSec=10
+MemoryMax=96M
+CPUQuota=10%
+UMask=0077
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

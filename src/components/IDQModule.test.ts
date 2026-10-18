@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { DEFAULT_SETTINGS } from '../lib/providerSettings';
 import { createServer } from 'vite';
 import { chromium } from 'playwright-core';
 import * as XLSX from 'xlsx';
@@ -20,6 +21,7 @@ try {
     const req=route.request(),path=new URL(req.url()).pathname;
     if(path==='/api/auth/me')return route.fulfill({json:{id:'operator',username:'Operator',role:'admin'}});
     if(path==='/api/db-status')return route.fulfill({json:{status:'connected'}});
+    if(path==='/api/workspace-provider-settings')return route.fulfill({json:DEFAULT_SETTINGS});
     if(path==='/api/qa-configuration')return route.fulfill({json:{qaAgentMemory:'Memory',attributeSets}});
     if(path==='/api/attribute-sets/phones'&&req.method()==='PUT'){const data=req.postDataJSON();assert.equal(data.catalogHeaderRequirements.name,'mandatory');Object.assign(attributeSets[0],data);requirementsSaved=true;return route.fulfill({json:attributeSets[0]});}
     if(path==='/api/catalog'||path==='/api/jobs'||path==='/api/job-runs'||path==='/api/users')return route.fulfill({json:[]});

@@ -16,10 +16,15 @@ const url = new URL(process.env.TEST_DATABASE_URL);
 url.searchParams.set('options', `-c search_path=${namespace}`);
 const port = Number(process.env.SCRAPER_TEST_PORT || 3344);
 const container = process.env.SCRAPER_TEST_IMAGE;
+const release = path.resolve(process.env.SCRAPER_TEST_RELEASE_DIR || '.');
+const node = process.env.SCRAPER_TEST_RELEASE_DIR ? path.join(release, 'runtime/node') : process.execPath;
+const backupModel = 'deepseek/deepseek-v4.1-flash';
 const name = `paxth-scrape-smoke-${randomUUID().slice(0, 8)}`;
 const username = 'Scraper smoke', password = randomUUID();
 const env = { ...process.env, DATABASE_URL: url.href, NODE_ENV: 'production', HOST: '127.0.0.1', PORT: String(port),
-  APP_ORIGIN: 'https://scrape-smoke.example', LLM_BASE_URL: 'https://mock.scrape.example/v1', LLM_API_KEY: 'mock-only', CRAWL4AI_API_KEY: 'cloud-mock-only',
+  APP_ORIGIN: 'https://scrape-smoke.example', AICREDITS_API_KEY_1: 'mock-only', CRAWL4AI_API_KEY: 'cloud-mock-only',
+  AICREDITS_API_KEY_2: '', AICREDITS_API_KEY_3: '', AICREDITS_API_KEY_4: '', AICREDITS_API_KEY_5: '',
+  LLM_BASE_URL: '', LLM_API_KEY: '', AICREDITS_API_KEY: '',
   BOOTSTRAP_ADMIN_USERNAME: username, BOOTSTRAP_ADMIN_PASSWORD: password };
 const preload = path.join(folder, 'provider.mjs');
 await writeFile(preload, `globalThis.fetch=async(url,init)=>{
@@ -27,7 +32,7 @@ await writeFile(preload, `globalThis.fetch=async(url,init)=>{
     if(new Headers(init.headers).get('Authorization')!=='Bearer cloud-mock-only')throw new Error('Cloud credential isolation failed');
     return Response.json({ok:true,markdown:'# Product\\nBrand: TestBrand\\nWeight: 500 g\\nPrice: ₹1,299\\n[Manual](https://example.com/manual)'});
   }
-  if(String(url)!=='https://mock.scrape.example/v1/chat/completions')throw new Error('Unexpected outbound destination');
+  if(String(url)!=='https://aicredits.in/v1/chat/completions')throw new Error('Unexpected outbound destination');
   if(new Headers(init.headers).get('Authorization')!=='Bearer mock-only')throw new Error('Model credential isolation failed');
   const payload=JSON.parse(init.body);
   const input=JSON.parse(payload.messages.find(message=>message.role==='user').content);
@@ -48,7 +53,7 @@ const memory = pid => {
   } catch { return 0; }
 };
 const command = (file, args) => {
-  const result = spawnSync(file, args, { env, stdio: 'pipe', encoding: 'utf8' });
+  const result = spawnSync(file, args, { env, cwd: release, stdio: 'pipe', encoding: 'utf8' });
   assert.equal(result.status, 0, result.error?.message || result.stderr);
 };
 let cookie = '';
@@ -63,17 +68,17 @@ const request = async (endpoint, method = 'GET', body, authorized = true, expect
 };
 try {
   await root.query(`CREATE SCHEMA ${namespace}`);
-  command(process.execPath, ['dist/bootstrap-admin.mjs']);
+  command(node, ['dist/bootstrap-admin.mjs']);
   await root.query(`ALTER TABLE ${namespace}.users ADD COLUMN scrapegraph_api_key text;
     ALTER TABLE ${namespace}.users ADD COLUMN scrapegraph_settings jsonb DEFAULT '{}';
     UPDATE ${namespace}.users SET scrapegraph_api_key='retired-only',scrapegraph_settings='{"retired":true}';
     CREATE TABLE ${namespace}.provider_settings (id text PRIMARY KEY CHECK(id='default'), settings jsonb NOT NULL);
-    INSERT INTO ${namespace}.provider_settings VALUES ('default','{"modelName":"smoke/qa","scrapperModelName":"retired/navigation","navigationModelInitialized":true}');`);
+    INSERT INTO ${namespace}.provider_settings VALUES ('default','{"modelName":"smoke/qa","scraperModelName":"z-ai/glm-5.3-flash","scrapperModelName":"retired/navigation","navigationModelInitialized":true}');`);
   const args = container ? ['run', '--rm', '--init', '--name', name, '--network', 'host', '--cpus', '1', '--memory', '1536m', '--shm-size', '256m',
-    ...['DATABASE_URL','NODE_ENV','HOST','PORT','APP_ORIGIN','LLM_BASE_URL','LLM_API_KEY','CRAWL4AI_API_KEY'].flatMap(key=>['-e', `${key}=${env[key]}`]),
+    ...['DATABASE_URL','NODE_ENV','HOST','PORT','APP_ORIGIN','AICREDITS_API_KEY_1','CRAWL4AI_API_KEY'].flatMap(key=>['-e', `${key}=${env[key]}`]),
     '-v', `${preload}:/test-provider.mjs:ro`, container, 'node', '--import', '/test-provider.mjs', 'dist/server.mjs']
     : ['--import', preload, 'dist/server.mjs'];
-  app = spawn(container ? 'docker' : process.execPath, args, { env, stdio: ['ignore','pipe','pipe'] });
+  app = spawn(container ? 'docker' : node, args, { env, cwd: release, stdio: ['ignore','pipe','pipe'] });
   let logs=''; app.stdout.on('data', b=>{logs+=b;});app.stderr.on('data', b=>{logs+=b;});
   app.on('error', error=>{logs+=error.message;});
   if(!container)meter=setInterval(()=>{peakKiB=Math.max(peakKiB,memory(app.pid));},100);
@@ -83,6 +88,11 @@ try {
     try { await request('/healthz'); ready=true;break; } catch { await delay(100); }
   }
   assert.ok(ready, logs || 'Production server did not become ready');
+  if (process.env.SCRAPER_TEST_RELEASE_DIR) {
+    const metadata = JSON.parse(readFileSync(path.join(release, 'release.json'), 'utf8'));
+    assert.equal((await request('/version.json')).data.commit, metadata.commit, 'The packaged frontend and server identify the tested release.');
+    assert.equal(spawnSync(node, ['--version'], { encoding: 'utf8' }).stdout.trim(), `v${metadata.node}`);
+  }
   cookie=(await request('/api/auth/login','POST',{username,password},false)).cookie;
   assert.ok(cookie);
   const persisted = (await root.query(`SELECT settings FROM ${namespace}.provider_settings WHERE id='default'`)).rows[0].settings;
@@ -100,7 +110,7 @@ try {
   assert.equal(preview.requestedUrl,scrapeUrl);assert.equal(preview.finalUrl,null);assert.equal(preview.capturedAt,null);assert.ok(preview.receivedAt);
   assert.equal(preview.report.characters,preview.markdown.length);
   const jsonFallback=(await request('/api/scrape/preview','POST',{url:'https://8.8.8.8/json-fallback'})).data;
-  assert.equal(jsonFallback.modelName,'z-ai/glm-5.3-flashx');
+  assert.equal(jsonFallback.modelName,backupModel);
   assert.match(jsonFallback.markdown,/Weight: 500 g/);
   assert.ok(jsonFallback.markdown.endsWith('Source: <https://8.8.8.8/json-fallback>'));
   assert.equal(jsonFallback.report.warnings.at(-1).code,'MODEL_FALLBACK');
@@ -146,7 +156,7 @@ try {
     command('docker',['exec',name,'node','-e',"fetch('http://127.0.0.1:'+process.env.PORT+'/healthz').then(r=>process.exit(r.ok?0:1))"]);
     console.log('Production-container smoke passed with one CPU / 1536 MiB: migration preservation, SKU evidence persistence/revisions, QA, login and readiness.');
   } else {
-    assert.ok(peakKiB < 1536*1024, `Observed process RSS ${peakKiB/1024} MiB exceeds the deployment limit`);
+    assert.ok(peakKiB < 512*1024, `Observed process RSS ${peakKiB/1024} MiB exceeds the 512 MiB deployment limit`);
     console.log(`Production-bundle smoke passed: standalone URL preview without catalog writes, migration preservation, SKU evidence persistence/revisions, concurrent QA and login, ${Date.now()-started} ms, peak process RSS ${(peakKiB/1024).toFixed(1)} MiB. PostgreSQL is excluded; both providers are mocked.`);
   }
 } finally {

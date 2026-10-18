@@ -4,7 +4,7 @@ Paxth Q.A. Engine helps catalog editors review ecommerce product spreadsheets an
 
 Upload a spreadsheet, prepare the evidence, create a job, run the review, and export an Excel workbook with findings and suggested corrections. A language model produces the review; a person should verify its findings before changing the product catalog.
 
-**Development status:** the app is currently being built in GitHub Codespaces. It has not been deployed. The production instructions below describe a possible future deployment.
+**Development and delivery:** the app is built in GitHub Codespaces. GitHub Actions and isolated systemd deployment are configured for a secondary VPS app; see [CI/CD setup, required GitHub settings, and recovery](docs/ci-cd.md).
 
 **Current readiness:** private workspaces, permanent per-user key slots and four-workspace execution are implemented. Existing installations require the explicit [workspace migration](docs/workspaces.md). Configure real keys and verify live throughput before onboarding; remaining dependency findings in the [codebase review](docs/codebase-review.md) still apply.
 
@@ -689,13 +689,13 @@ The database suites used an isolated local PostgreSQL 15 instance and disposable
 
 ## Production deployment
 
-The app has not been deployed. These instructions apply only to a future production installation.
+The [secondary VPS CI/CD guide](docs/ci-cd.md) describes the supported automated setup. The native and Docker instructions below remain alternatives for other installations.
 
 ### Release decision
 
 Build artifacts and container configuration exist, but a successful build is not production approval. The QA import/result trust issue is fixed in this source. Resolve the review's remaining credential and dependency findings, then verify the intended database, HTTPS gateway, and provider contracts before unrestricted access.
 
-There is no checked-in automatic deployment workflow. Pushing to GitHub does not publish the app or restart a hosted service.
+The checked-in workflow runs core, disposable-database and browser checks before deploying `main` to the secondary VPS app. Automatic delivery requires the owner-configured environment and SSH credentials described in the [CI/CD guide](docs/ci-cd.md). A workflow file alone does not enforce branch protection.
 
 ### Without Docker
 

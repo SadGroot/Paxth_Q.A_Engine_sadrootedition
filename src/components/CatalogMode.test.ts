@@ -8,6 +8,7 @@ import type { SkuData } from '../hooks/useCatalogData';
 import type { Job } from '../context/AppContext';
 import { CATALOG_INPUT_HEADERS, getCatalogMapping, prepareCatalogInput, parseCatalogResponse, validateCatalogHeaders } from '../lib/catalogGeneration';
 import { prepareCatalogOutputs } from '../lib/catalogFiles';
+import { DEFAULT_SETTINGS } from '../lib/providerSettings';
 
 const headers = ['sku', 'base_code', 'attributes__attribute_set', 'attributes__lulu_ean', 'attribute__shipping_attribute',
   'attribute__shipment_type', 'attribute__common_item_whippy', 'attribute__fallback', 'name', 'attributes__color',
@@ -47,6 +48,7 @@ try {
     if (path === '/api/auth/me') return route.fulfill({ json: { id: 'operator', username: 'Operator', role } });
     if (path === '/api/users') return route.fulfill({ json: [] });
     if (path === '/api/db-status') return route.fulfill({ json: { status: 'connected' } });
+    if (path === '/api/workspace-provider-settings') return route.fulfill({ json: DEFAULT_SETTINGS });
     if (path === '/api/qa-configuration') return route.fulfill({ json: { qaAgentMemory: memory, attributeSets: emptyAttributeSets ? [] : attributeSets } });
     if (path === '/api/attribute-sets/tv' && request.method() === 'PUT') {
       headerSaveRequests++;

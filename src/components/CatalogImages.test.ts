@@ -4,6 +4,7 @@ import { createServer } from 'vite';
 import { chromium } from 'playwright-core';
 import JSZip from 'jszip';
 import type { SkuData } from '../hooks/useCatalogData';
+import { DEFAULT_SETTINGS } from '../lib/providerSettings';
 
 const row = (sku: string): SkuData => ({ sku, source: { url: 'https://shop.example/product' }, raw_row: {}, upload_attributes: {}, status: 'completed',
   scraped_markdown: '## Product images\n- <https://cdn.example/front.png>\n- <https://cdn.example/side.png>\n- <https://cdn.example/transparent.png>\n\nSource: <https://shop.example/product>',
@@ -27,6 +28,7 @@ try {
     const request = route.request(), path = new URL(request.url()).pathname;
     if (path === '/api/auth/me') return route.fulfill({ json: { id: 'operator', username: 'Operator', role: 'user' } });
     if (path === '/api/db-status') return route.fulfill({ json: { status: 'connected' } });
+    if (path === '/api/workspace-provider-settings') return route.fulfill({ json: DEFAULT_SETTINGS });
     if (path === '/api/qa-configuration') return route.fulfill({ json: { qaAgentMemory: '', attributeSets: [] } });
     if (path === '/api/catalog') return route.fulfill({ json: rows });
     if (path === '/api/jobs') return route.fulfill({ json: [job] });

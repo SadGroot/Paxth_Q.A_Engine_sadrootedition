@@ -101,7 +101,7 @@ try {
     if (path === '/api/auth/me') return route.fulfill({ status: authenticated ? 200 : 401, json: authenticated ? account : { error: 'Sign in' } });
     if (path === '/api/auth/login') { authenticated = true; return route.fulfill({ json: account }); }
     if (path === '/api/users') return route.fulfill({ json: [] });
-    if (path === '/api/provider-settings') {
+    if (path === '/api/provider-settings' || path === '/api/workspace-provider-settings') {
       if (request.method() === 'PUT') { settingsWrites.push(request.postDataJSON()); savedSettings = { ...savedSettings, ...request.postDataJSON() }; }
       return route.fulfill({ json: savedSettings });
     }
@@ -597,6 +597,8 @@ try {
   assert.equal(lastScrapeRevision,savedRevision,'An older catalog refresh cannot roll back the saved revision');
 
   await page.getByRole('button', { name: 'LLM Settings', exact: true }).click();
+  await page.getByRole('combobox', { name: 'Settings scope' }).selectOption('global');
+  await page.waitForFunction(() => { const form = document.querySelector('fieldset'); return form && !form.disabled; });
   assert.equal(await page.getByLabel('Navigation model', {exact:true}).count(),0);
   const reasoning = page.getByLabel('Reasoning level', { exact: true });
   assert.equal(await reasoning.isEnabled(), true);
@@ -639,7 +641,7 @@ try {
   assert.deepEqual(chatRequests.at(-1), {modelName:'draft/scrape',purpose:'scrape'});
   assert.equal(settingsWrites.length,0);
   await page.getByRole('button', { name: 'Save changes', exact: true }).click();
-  await page.getByText('Settings saved for everyone.', { exact: true }).waitFor();
+  await page.getByText('Global defaults saved. Workspaces with overrides keep their settings.', { exact: true }).waitFor();
   assert.equal(settingsWrites.length, 1);
   assert.equal(Object.hasOwn(settingsWrites[0], 'scrapperModelName'), false);
   assert.equal(settingsWrites[0].modelName, 'draft/qa');
@@ -649,6 +651,8 @@ try {
   assert.doesNotMatch(JSON.stringify(settingsWrites), /apiKey|test-only/);
   await page.reload();
   await page.getByRole('button', { name: 'LLM Settings', exact: true }).click();
+  await page.getByRole('combobox', { name: 'Settings scope' }).selectOption('global');
+  await page.waitForFunction(() => { const form = document.querySelector('fieldset'); return form && !form.disabled; });
   await page.waitForFunction(input => (input as HTMLInputElement).value === 'draft/qa', await page.getByLabel('Q&A model', { exact: true }).elementHandle());
   assert.equal(await page.getByLabel('Reasoning level', { exact: true }).inputValue(), 'high', 'The saved reasoning level survives reopening Settings');
   await page.getByLabel('Q&A model', { exact: true }).fill('deepseek/deepseek-v4.1-flash');
@@ -663,7 +667,9 @@ try {
   chatMode = 'missing';
   await page.reload();
   await page.getByRole('button', { name: 'LLM Settings', exact: true }).click();
-  await page.getByText('Provider credentials are configured on the server. Server provider credentials are missing.', { exact: true }).waitFor();
+  await page.getByRole('combobox', { name: 'Settings scope' }).selectOption('global');
+  await page.waitForFunction(() => { const form = document.querySelector('fieldset'); return form && !form.disabled; });
+  await page.getByText(/Provider credentials are configured on the server\. Server provider credentials are missing\./).waitFor();
   assert.equal(await testing.isEnabled(), true);
   await testing.click();
   await page.getByText('Q&A (draft/qa): Failed: Configure LLM_BASE_URL and LLM_API_KEY on the server.', { exact: true }).waitFor();
