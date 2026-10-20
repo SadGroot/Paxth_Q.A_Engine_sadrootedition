@@ -10,7 +10,7 @@ const headers=['sku','base_code','attributes__lulu_ean','attributes__shipping_we
 const attributeSets=[{id:'phones',name:'Phones',rulesMarkdown:'Keep existing values.',catalogHeaders:headers,catalogHeaderRequirements:Object.fromEntries(headers.map(h=>[h,'optional'])),createdAt:Date.now(),updatedAt:Date.now()}];
 const mapping={id:'phones',name:'Phones',headers,requirements:attributeSets[0].catalogHeaderRequirements,rules:'Keep existing values.'} as any;
 const template=Buffer.from(await idqTemplate([mapping]));
-const item={position:0,url:'https://example.com/phone',attributeSet:'Phones',status:'running',stage:'Researching product evidence',searches:1,reads:2,result:{values:{sku:'000123',name:'Existing title'},added:[],notes:{},conflicts:[],missing:['name'],issues:['Review exact capacity.']}};
+const item={position:0,sku:'000123',url:'',attributeSet:'Phones',status:'running',stage:'Researching product evidence',searches:1,reads:2,result:{values:{sku:'000123',name:'Existing title'},added:[],notes:{},conflicts:[],missing:[],issues:[],readyForUpload:true}};
 let job:any=null,createCalls=0,cancelCalls=0,resumeCalls=0,templateCalls=0,requirementsSaved=false;
 const vite=await createServer({cacheDir:'/tmp/paxth-idq-vite-cache',server:{host:'127.0.0.1',port:0,hmr:false},logLevel:'error'});
 let browser:Awaited<ReturnType<typeof chromium.launch>>|undefined;
@@ -28,8 +28,8 @@ try {
     if(path==='/api/idq/jobs/template'){templateCalls++;assert.deepEqual(req.postDataJSON().attributeSetIds,['phones']);return route.fulfill({body:template,contentType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});}
     if(path==='/api/idq/jobs'){
       if(req.method()==='GET')return route.fulfill({json:job?[job]:[]});
-      const data=req.postDataJSON();createCalls++;assert.equal(data.mode,'scraped');assert.equal(data.sheets[0].rows[0][2],'000123');assert.equal(data.sheets[0].rows[0][4],'Extra ™');assert.ok(data.requestId);
-      job={id:'idq-job',name:data.name,actorId:'operator',status:'running',mode:'scraped',modelName:'z-ai/glm-5.3-flash',createdAt:new Date().toISOString(),total:1,finished:0,mappings:[mapping],items:[item]};return route.fulfill({status:201,json:job});
+      const data=req.postDataJSON();createCalls++;assert.equal(data.mode,'research');assert.equal(data.sheets[0].rows[0][0],'000123');assert.equal(data.sheets[0].rows[0][4],'Extra ™');assert.equal(data.sheets[0].columns.includes(IDQ_URL),false);assert.ok(data.requestId);
+      job={id:'idq-job',name:data.name,actorId:'operator',status:'running',mode:'research',modelName:'z-ai/glm-5.3-flash',createdAt:new Date().toISOString(),total:1,finished:0,mappings:[mapping],items:[item]};return route.fulfill({status:201,json:job});
     }
     if(path==='/api/idq/jobs/idq-job/cancel'){cancelCalls++;job.status='cancelled';item.status='cancelled';return route.fulfill({json:job});}
     if(path==='/api/idq/jobs/idq-job/resume'){resumeCalls++;job.status='completed';job.finished=1;item.status='completed';return route.fulfill({json:job});}
@@ -39,12 +39,11 @@ try {
   });
   await page.goto(vite.resolvedUrls!.local[0]);
   await page.getByRole('button',{name:'IDQ',exact:true}).click();
-  assert.equal(await page.getByLabel('Excel workbook (.xlsx or .xls)',{exact:true}).count(),0,'Mode must be chosen before upload');
-  await page.getByLabel('Input mode',{exact:true}).selectOption('url');
+  assert.equal(await page.getByLabel('Excel workbook (.xlsx or .xls)',{exact:true}).count(),1,'Product upload is immediately available');
+  assert.equal(await page.getByLabel('Input mode',{exact:true}).count(),0,'The old URL-first mode selection is removed');
   await page.getByText('Download a template',{exact:true}).click();await page.getByRole('checkbox',{name:'Phones',exact:true}).check();
   const download=page.waitForEvent('download');await page.getByRole('button',{name:'Download selected templates'}).click();await download;assert.equal(templateCalls,1);
-  const workbook=(set:string)=>{const book=XLSX.utils.book_new();XLSX.utils.book_append_sheet(book,XLSX.utils.aoa_to_sheet([[IDQ_URL,IDQ_SET,'sku','name','extra'],['https://example.com/phone',set,'000123','Existing title','Extra ™']]),'Input');return Buffer.from(XLSX.write(book,{type:'buffer',bookType:'xlsx'}));};
-  await page.getByLabel('Input mode',{exact:true}).selectOption('scraped');
+  const workbook=(set:string)=>{const book=XLSX.utils.book_new();XLSX.utils.book_append_sheet(book,XLSX.utils.aoa_to_sheet([['sku','attribute_set','name','source__sap','extra'],['000123',set,'Phone X100 Blue 128GB','Model X100. Battery 5000 mAh.','Extra ™']]),'Input');return Buffer.from(XLSX.write(book,{type:'buffer',bookType:'xlsx'}));};
   await page.getByLabel('Excel workbook (.xlsx or .xls)',{exact:true}).setInputFiles({name:'bad.xlsx',mimeType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',buffer:workbook('Unknown')});
   await page.getByRole('alert').filter({hasText:'Unknown attribute set'}).waitFor();assert.ok(await page.getByRole('button',{name:'Start enrichment'}).isDisabled());assert.equal(createCalls,0);
   await page.getByLabel('Excel workbook (.xlsx or .xls)',{exact:true}).setInputFiles({name:'catalog.xlsx',mimeType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',buffer:workbook('Phones')});
@@ -52,9 +51,10 @@ try {
   await page.getByRole('button',{name:'Start enrichment'}).click();await page.getByRole('button',{name:'Cancel batch'}).waitFor();assert.equal(createCalls,1);
   await page.getByRole('button',{name:'Cancel batch'}).click();await page.getByRole('button',{name:'Resume unfinished products'}).click();await page.getByRole('progressbar',{name:'Batch progress'}).waitFor();assert.equal(cancelCalls,1);assert.equal(resumeCalls,1);
   const exported=page.waitForEvent('download');await page.getByRole('button',{name:'Download workbook',exact:true}).click();await exported;
+  const upload=page.waitForEvent('download');await page.getByRole('button',{name:'Download upload templates',exact:true}).click();await upload;
   await page.reload();await page.getByRole('button',{name:'IDQ',exact:true}).click();await page.getByRole('button',{name:'catalog completed · 1/1',exact:false}).click();await page.getByRole('progressbar',{name:'Batch progress'}).waitFor();
   await page.getByRole('button',{name:'Attribute Sets',exact:true}).click();await page.getByText('Phones',{exact:true}).click();await page.getByRole('button',{name:'Catalog Output Headers',exact:true}).click();
   await page.getByLabel('name',{exact:true}).selectOption('mandatory');await page.getByRole('button',{name:'Update Logic',exact:true}).click();
   await page.waitForTimeout(300);assert.ok(requirementsSaved);
-  console.log('IDQ browser flow passed: mode-first upload, template, invalid set rejection, identifiers/extras, create, progress, cancel/resume, download, history and requirement editing.');
+  console.log('IDQ browser flow passed: immediate URL-free upload, templates, invalid set rejection, identifiers/SAP, research mode, progress, cancel/resume, review/upload downloads, history and requirement editing.');
 }finally{await browser?.close();await vite.close();}

@@ -24,7 +24,7 @@ settings; checking in a workflow alone does not enforce merge protection.
    enforce the rule for administrators; disable force pushes and deletion. Set
    required approving reviews to zero so a solo maintainer can merge passing PRs.
 
-## One-time VPS setup
+## One-time VPS setups
 
 The target is Ubuntu 24.04 x86-64 with systemd, Python 3 and cloudflared. Existing
 services, their environment, their Node runtime and port 3000 are left intact.

@@ -36,7 +36,7 @@
     "setup:browser": "playwright-core install chromium",
     "test:scrape-production": "node scripts/smoke-scraper.mjs",
     "test:scrape-live": "tsx scripts/test-live-scraper.ts",
-    "test:idq": "tsx src/lib/idq.test.ts && tsx src/server/idqResearch.test.ts",
+    "test:idq": "tsx src/lib/idq.test.ts && tsx src/server/tinyfish.test.ts && tsx src/server/idqResearch.test.ts",
     "test:idq-db": "tsx src/server/idqJobs.test.ts",
     "test:idq-browser": "tsx src/components/IDQModule.test.ts",
     "test:idq-live": "tsx scripts/test-live-idq.ts",

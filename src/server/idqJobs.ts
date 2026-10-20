@@ -11,6 +11,7 @@ import { resolvePublicAddress, validateScrapeInput } from '../lib/scrapeNetwork'
 import { emptyIdqProgress, IDQ_LIMITS, idqBaseResult, validateIdqInput, type IdqConfig, type IdqProgress } from '../lib/idq';
 import { idqTemplate, idqWorkbook } from '../lib/idqExcel';
 import { runIdqProduct } from './idqResearch';
+import { getTinyfishApiKey } from './tinyfish';
 import type { AttributeSet } from '../types';
 
 const ACTIVE = ['queued', 'running', 'cancelling'];
@@ -41,7 +42,7 @@ export async function readIdqJob(pool: Pool | PoolClient, id: string, ownerId: s
   if (!job) throw new ApiError(404, 'IDQ batch does not exist.');
   const { rows } = await pool.query('SELECT * FROM idq_items WHERE job_id=$1 ORDER BY position', [id]);
   return { ...summary(job), mappings: job.configuration.mappings, limits: job.configuration.limits, items: rows.map(item => ({
-    position: item.position, url: item.input.url, attributeSet: item.input.attributeSet, status: item.status,
+    position: item.position, sku: item.input.values.sku || '', url: item.input.url, attributeSet: item.input.attributeSet, status: item.status,
     stage: item.progress.stage || 'Waiting', searches: item.progress.searches?.length || 0, reads: item.progress.reads?.length || 0,
     result: item.result || item.progress.result || idqBaseResult(item.input, job.configuration.mappings.find((m: any) => m.name === item.input.attributeSet), { ...emptyIdqProgress(), ...item.progress }),
     error: item.error,
@@ -72,13 +73,15 @@ export function registerIdqRoutes(app: Express, pool: Pool) {
       catch (error) { throw new ApiError(400, (error as Error).message); }
       // No model, search or crawl requests until the whole workbook passes public URL/DNS checks.
       for (const item of input.items) {
-        try { const url = validateScrapeInput({ url: item.url }).url; await resolvePublicAddress(new URL(url)); }
-        catch { throw new ApiError(400, `Product URL must resolve exclusively to public internet addresses: ${item.url}`); }
+        if (item.url) {
+          try { const url = validateScrapeInput({ url: item.url }).url; await resolvePublicAddress(new URL(url)); }
+          catch { throw new ApiError(400, `Product URL must resolve exclusively to public internet addresses: ${item.url}`); }
+        }
         const image = item.values.image_url;
         if (image?.trim()) { try { validateScrapeInput({ url: image }); } catch { throw new ApiError(400, 'Image URLs must be public HTTP(S) URLs without credentials.'); } }
       }
 
-      try { getScraperApiKey(); } catch (error) { throw new ApiError(503, (error as Error).message); }
+      try { if (input.mode === 'research') getTinyfishApiKey(); else getScraperApiKey(); } catch (error) { throw new ApiError(503, (error as Error).message); }
       const settings = await getProviderSettings(pool, res.locals.workspaceId);
       getProviderCredentials(settings.providerKeySlot);
       const configuration: IdqConfig = { mode: input.mode, mappings: input.mappings, settings, limits: { ...IDQ_LIMITS } };
@@ -124,7 +127,9 @@ export function registerIdqRoutes(app: Express, pool: Pool) {
       const { rows: [job] } = await pool.query('SELECT * FROM idq_jobs WHERE id=$1 AND owner_id=$2', [req.params.id, res.locals.workspaceId]);
       if (!job) throw new ApiError(404, 'IDQ batch does not exist.');
       const { rows } = await pool.query('SELECT * FROM idq_items WHERE job_id=$1 ORDER BY position', [job.id]);
-      const data = await idqWorkbook(job.configuration.mappings, rows.map(row => ({ input: row.input, progress: { ...emptyIdqProgress(), ...row.progress }, result: row.result, status: row.status, error: row.error })));
+      const uploadOnly = req.query.format === 'upload';
+      if (uploadOnly && !rows.some(row => TERMINAL.includes(row.status) && (row.result || row.progress.result)?.readyForUpload === true)) throw new ApiError(409, 'No verified rows are ready for upload. Review product matching, source conflicts and missing mandatory fields.');
+      const data = await idqWorkbook(job.configuration.mappings, rows.map(row => ({ input: row.input, progress: { ...emptyIdqProgress(), ...row.progress }, result: row.result, status: row.status, error: row.error })), uploadOnly);
       res.set({ 'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'Content-Disposition': `attachment; filename="IDQ-${job.id}.xlsx"`, 'Cache-Control': 'no-store' }).send(Buffer.from(data));
     } catch (error) { next(error); }
   });

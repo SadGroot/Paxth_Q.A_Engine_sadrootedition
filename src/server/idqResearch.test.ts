@@ -136,3 +136,72 @@ try {
   if (originalKey === undefined) delete process.env.LLM_API_KEY; else process.env.LLM_API_KEY = originalKey;
 }
 console.log('IDQ modes, first image, bounded tools, blocked pages, deadlines, cancellation and capture/research restart passed.');
+
+// New research starts from the Excel contents, searches TinyFish, compares SAP, then formats the mapped row.
+const productInput:IdqInput={url:'',attributeSet:'Phones',columns:['sku','attribute_set','name','source__sap','battery'],values:{sku:'0009',attribute_set:'Phones',name:'Phone X100 Blue 128GB',source__sap:'Model X100. Battery: 5000 mAh.',battery:'5000 mAh'}};
+const productMapping:IdqMapping={id:'phones',name:'Phones',headers:['sku','name','battery','bullet_points'],requirements:{sku:'mandatory',name:'mandatory',battery:'mandatory',bullet_points:'mandatory'},rules:'Use the model and colour in the title. Write bullets from verified facts. Preserve identifiers.'};
+let researchSearches=0,researchReads=0,formatCalls=0;
+const productState=emptyIdqProgress();
+const productDeps={
+  search:async(query:string)=>{researchSearches++;assert.match(query,/X100/);return [{url:'https://maker.example/x100',title:'Phone X100',snippet:'Not evidence'}];},
+  collect:async(url:string)=>{researchReads++;assert.equal(url,'https://maker.example/x100');return {...page(url),markdown:page(url).markdown+' Battery: 4500 mAh.'};},
+  complete:async(payload:any,_signal:AbortSignal,options:any)=>{
+    await options.beforeAttempt(1,payload);
+    if(payload.tools){
+      const outputs=payload.messages.filter((message:any)=>message.role==='tool');
+      if(!outputs.length)return assistant([tool('read_page',{url:'https://maker.example/x100'},'product')]);
+      return response({done:true});
+    }
+    const task=JSON.parse(payload.messages[1].content);
+    if(task.task?.startsWith('Extract title'))return response({...baseline,identity:{...baseline.identity,ambiguous:false},sapFacts:[{header:'battery',value:'5000 mAh',quote:'Battery: 5000 mAh.'},{header:'name',value:'Fabricated',quote:'Fabricated SAP quote'}]});
+    if(task.editableHeaders){
+      formatCalls++;assert.equal(task.verifiedFacts.battery.value,'4500 mAh');assert.match(task.mappingRules,/colour/);
+      return response({row:{sku:'DO NOT CHANGE SKU',name:'Phone X100 Blue 128GB — 4500 mAh',battery:'9999 mAh',bullet_points:'Battery: 4500 mAh'},warnings:[],cellWarnings:[]});
+    }
+    if(task.uploadRow)return response({mismatches:['name','bullet_points'].map(header=>({header,sapValue:'5000 mAh',sapQuote:'Battery: 5000 mAh.',outputValue:'4500 mAh'}))});
+    return response({matches:[{sourceId:'research-1',kind:'manufacturer',verdict:'exact',quote:'Phone X100 Blue 128GB.'}],facts:[{header:'battery',value:'4500 mAh',evidence:[{sourceId:'research-1',quote:'Battery: 4500 mAh.'}]}],conflicts:[],issues:[]});
+  },
+};
+const productConfig:IdqConfig={...config,mode:'research',mappings:[productMapping]};
+const productResult=await runIdqProduct(productInput,productMapping,productConfig,productState,new AbortController().signal,async()=>{},productDeps);
+assert.equal(researchSearches,1);assert.equal(researchReads,1);assert.equal(formatCalls,1);
+assert.equal(productResult.values.sku,'0009');assert.equal(productResult.values.battery,'4500 mAh');assert.equal(productResult.values.source__sap,productInput.values.source__sap);
+assert.equal(productResult.mismatches![0].sap,'5000 mAh');assert.equal(productResult.readyForUpload,true);assert.equal(productState.baseline!.sapFacts!.length,1);
+assert.ok(productResult.conflicts.includes('name'),'SAP contradictions introduced into a mapped title are also highlighted');
+assert.equal(productResult.mismatches!.find(change=>change.header==='name')!.selected,productResult.values.name);
+assert.equal(productResult.values.bullet_points,'Battery: 4500 mAh');assert.ok(productResult.conflicts.includes('bullet_points'));assert.ok(productResult.added.includes('bullet_points'));
+await runIdqProduct(productInput,productMapping,productConfig,productState,new AbortController().signal,async()=>{},productDeps);
+assert.equal(researchSearches,1);assert.equal(researchReads,1);assert.equal(formatCalls,1,'Resume reuses the saved mapping response');
+const uncertain=await runIdqProduct(productInput,productMapping,productConfig,emptyIdqProgress(),new AbortController().signal,async()=>{},{...productDeps,
+  search:async()=>{throw new Error('Ambiguous products must not search');},
+  complete:async(payload:any,_signal:AbortSignal,options:any)=>{await options.beforeAttempt(1,payload);return response({...baseline,identity:{...baseline.identity,ambiguous:true}});},
+});
+assert.equal(uncertain.readyForUpload,false);
+const sapIdentity=await runIdqProduct({...productInput,values:{...productInput.values,source__sap:'Model Z900.'}},productMapping,productConfig,emptyIdqProgress(),new AbortController().signal,async()=>{},{...productDeps,
+  search:async()=>{throw new Error('SAP-only identity must not trigger research');},
+  complete:async(payload:any,_signal:AbortSignal,options:any)=>{await options.beforeAttempt(1,payload);return response({...baseline,identity:{...baseline.identity,anchors:[{value:'Z900',quote:'Model Z900.'}],variants:[]}});},
+});
+assert.equal(sapIdentity.readyForUpload,false);assert.ok(sapIdentity.issues.some(issue=>issue.includes('identity is ambiguous')));
+const invalidReview=await runIdqProduct(productInput,productMapping,productConfig,emptyIdqProgress(),new AbortController().signal,async()=>{},{...productDeps,
+  complete:async(payload:any,signal:AbortSignal,options:any)=>{
+    if(JSON.parse(payload.messages[1].content).uploadRow){await options.beforeAttempt(1,payload);return response({mismatches:[{header:'name',sapValue:'9999 mAh',sapQuote:'Invented SAP quotation',outputValue:'4500 mAh'}]});}
+    return productDeps.complete(payload,signal,options);
+  },
+});
+assert.equal(invalidReview.readyForUpload,false);assert.ok(invalidReview.issues.some(issue=>issue.includes('unsupported finding')));
+const backendMapping:IdqMapping={...productMapping,headers:['sku','attributes__product_title','attributes__product_description','battery'],requirements:{}};
+const backendResult=await runIdqProduct(productInput,backendMapping,{...productConfig,mappings:[backendMapping]},emptyIdqProgress(),new AbortController().signal,async()=>{},{...productDeps,
+  complete:async(payload:any,signal:AbortSignal,options:any)=>{
+    const task=JSON.parse(payload.messages[1].content);
+    if(task.editableHeaders){
+      await options.beforeAttempt(1,payload);
+      assert.ok(task.editableHeaders.includes('attributes__product_title'));assert.ok(task.editableHeaders.includes('attributes__product_description'));
+      return response({row:{sku:'0009',attributes__product_title:'Phone X100 Blue 128GB',attributes__product_description:'Battery: 4500 mAh.',battery:'4500 mAh'},warnings:[],cellWarnings:[{header:'attributes__product_title',message:'The saved mapping requires a brand that available evidence does not establish.'}]});
+    }
+    if(task.uploadRow){await options.beforeAttempt(1,payload);return response({mismatches:[]});}
+    return productDeps.complete(payload,signal,options);
+  },
+});
+assert.equal(backendResult.values.attributes__product_description,'Battery: 4500 mAh.');
+assert.equal(backendResult.readyForUpload,false,'Mapping warnings block upload even without separate header classifications');
+console.log('URL-free identification, automatic product search, SAP comparison, mapped upload rows, frozen identifiers and resume passed.');

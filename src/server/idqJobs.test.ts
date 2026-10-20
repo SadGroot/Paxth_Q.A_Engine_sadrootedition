@@ -21,7 +21,7 @@ const namespace=`idq_${randomUUID().replaceAll('-','')}`;
 const root=new Pool({connectionString:process.env.TEST_DATABASE_URL});await root.query(`CREATE SCHEMA ${namespace}`);
 const pool=new Pool({connectionString:process.env.TEST_DATABASE_URL,options:`-c search_path=${namespace}`,max:10});
 const app=express(),server=createServer(app);let stop:(()=>Promise<void>)|undefined;
-process.env.LLM_BASE_URL='http://127.0.0.1:1/v1';process.env.LLM_API_KEY='test-key';process.env.CRAWL4AI_API_KEY='test-crawl';process.env.NODE_ENV='test';
+process.env.LLM_BASE_URL='http://127.0.0.1:1/v1';process.env.LLM_API_KEY='test-key';process.env.CRAWL4AI_API_KEY='test-crawl';process.env.TINYFISH_API_KEY='test-tinyfish';process.env.NODE_ENV='test';
 try {
   await initializeAuth(pool);await initializeDatabase(pool);await initializeQaConfiguration(drizzle(pool,{schema}));await initializeAuth(pool);await initializeProvider(pool);await initializeIdq(pool);await initializeIdq(pool);await initializeJobRuns(pool);
   const headers=['sku','name','capacity'];const requirements={sku:'mandatory',name:'optional',capacity:'mandatory'};
@@ -86,5 +86,10 @@ try {
   const book=new ExcelJS.Workbook();await book.xlsx.load(await exportRes.arrayBuffer() as any);assert.equal(book.worksheets.length,3);assert.equal(book.getWorksheet('Phones')!.getRow(2).getCell(1).value,'0001');
   assert.equal((await pool.query('SELECT count(*) FROM sku_data')).rows[0].count,'0','IDQ does not alter the catalog');assert.equal((await pool.query('SELECT count(*) FROM jobs')).rows[0].count,'0');
   assert.equal((await request('')).body.length,1);assert.equal((await request('/missing')).status,404);
+  const researchBody={requestId:randomUUID(),name:'URL-free research',mode:'research',sheets:[{columns:['sku','attribute_set','name','source__sap'],rows:[['0009','Phones','Phone X100 Blue 128GB','Battery: 5000 mAh.']]}]};
+  const researchCreated=await request('','POST',researchBody);assert.equal(researchCreated.status,201);
+  assert.equal(researchCreated.body.items[0].url,'');assert.equal(researchCreated.body.items[0].sku,'0009');
+  assert.equal((await pool.query('SELECT configuration FROM idq_jobs WHERE id=$1',[researchCreated.body.id])).rows[0].configuration.mode,'research');
+  assert.equal((await request(`/${researchCreated.body.id}/cancel`,'POST')).status,200);
   console.log('IDQ authenticated API, validation, snapshots, templates, mixed sets, worker recovery, ownership, cancel/resume, export and catalog isolation passed.');
 } finally {await stop?.();server.closeAllConnections();await new Promise<void>(resolve=>server.close(()=>resolve()));await pool.end();await root.query(`DROP SCHEMA ${namespace} CASCADE`);await root.end();}
